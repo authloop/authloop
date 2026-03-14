@@ -1,18 +1,47 @@
 {
   "name": "@authloop-ai/mcp",
   "version": "0.1.0",
+  "description": "MCP server for AuthLoop — hand off OTP, captcha, and password challenges to humans",
   "type": "module",
   "license": "MIT",
+  "author": "AuthLoop <hello@authloop.ai> (https://authloop.ai)",
+  "homepage": "https://github.com/authloop-ai/authloop/tree/main/packages/mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/authloop-ai/authloop.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/authloop-ai/authloop/issues"
+  },
+  "keywords": [
+    "authloop",
+    "mcp",
+    "model-context-protocol",
+    "authentication",
+    "otp",
+    "captcha",
+    "ai-agents",
+    "human-in-the-loop",
+    "livekit",
+    "cdp"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "authloop-mcp": "./dist/index.js"
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "check-types": "tsc --noEmit",
     "codegen": "tsx scripts/generate.ts",
     "codegen:local": "AUTHLOOP_OPENAPI_URL=http://localhost:8787/openapi.json tsx scripts/generate.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@authloop-ai/sdk": "workspace:*",

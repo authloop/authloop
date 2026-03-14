@@ -1,8 +1,29 @@
 {
   "name": "@authloop-ai/sdk",
   "version": "0.1.0",
+  "description": "TypeScript SDK for AuthLoop — human-in-the-loop authentication for AI agents",
   "type": "module",
   "license": "MIT",
+  "author": "AuthLoop <hello@authloop.ai> (https://authloop.ai)",
+  "homepage": "https://github.com/authloop-ai/authloop/tree/main/packages/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/authloop-ai/authloop.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/authloop-ai/authloop/issues"
+  },
+  "keywords": [
+    "authloop",
+    "authentication",
+    "otp",
+    "captcha",
+    "ai-agents",
+    "human-in-the-loop",
+    "mcp",
+    "sdk"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -11,13 +32,17 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "check-types": "tsc --noEmit",
     "codegen": "tsx scripts/generate.ts",
     "codegen:local": "AUTHLOOP_OPENAPI_URL=http://localhost:8787/openapi.json tsx scripts/generate.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {},
   "devDependencies": {

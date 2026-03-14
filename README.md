@@ -78,6 +78,14 @@ Sign up at [authloop.ai](https://authloop.ai) → Dashboard → API Keys.
 
 **25 free handoffs** to get started. No credit card required.
 
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and guidelines.
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for release history.
+
 ## License
 
-MIT
+[MIT](./LICENSE)

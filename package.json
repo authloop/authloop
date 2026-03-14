@@ -6,7 +6,8 @@
     "dev": "turbo run dev",
     "check-types": "turbo run check-types",
     "codegen": "turbo run codegen",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "release": "pnpm build && pnpm test && pnpm check-types"
   },
   "devDependencies": {
     "turbo": "^2.8.17",
