@@ -18,6 +18,7 @@ export interface HandoffResult {
   sessionId: string;
   sessionUrl: string;
   streamToken: string;
+  livekitUrl: string;
   expiresAt: string;
 }
 
@@ -74,6 +75,7 @@ export class Authloop {
       sessionId: data.session_id!,
       sessionUrl: data.session_url!,
       streamToken: data.stream_token!,
+      livekitUrl: data.livekit_url!,
       expiresAt: data.expires_at!,
     };
   }

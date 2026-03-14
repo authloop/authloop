@@ -1,5 +1,5 @@
 {
-  "name": "@authloop/sdk",
+  "name": "@authloop-ai/sdk",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
@@ -16,7 +16,8 @@
     "build": "tsc",
     "check-types": "tsc --noEmit",
     "codegen": "tsx scripts/generate.ts",
-    "codegen:local": "AUTHLOOP_OPENAPI_URL=http://localhost:8787/openapi.json tsx scripts/generate.ts"
+    "codegen:local": "AUTHLOOP_OPENAPI_URL=http://localhost:8787/openapi.json tsx scripts/generate.ts",
+    "test": "vitest run"
   },
   "dependencies": {},
   "devDependencies": {

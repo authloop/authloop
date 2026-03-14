@@ -1,5 +1,5 @@
 {
-  "name": "@authloop/mcp",
+  "name": "@authloop-ai/mcp",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
@@ -11,14 +11,18 @@
     "build": "tsc",
     "check-types": "tsc --noEmit",
     "codegen": "tsx scripts/generate.ts",
-    "codegen:local": "AUTHLOOP_OPENAPI_URL=http://localhost:8787/openapi.json tsx scripts/generate.ts"
+    "codegen:local": "AUTHLOOP_OPENAPI_URL=http://localhost:8787/openapi.json tsx scripts/generate.ts",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@authloop/sdk": "workspace:*",
+    "@authloop-ai/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "@livekit/rtc-node": "^0.13.3"
+    "@livekit/rtc-node": "^0.13.3",
+    "jpeg-js": "^0.4.4",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "openapi-typescript": "^7.8.0",
     "tsx": "^4.19.4",
     "typescript": "5.9.3"

@@ -1,6 +1,6 @@
 # Implementation Tasks
 
-## Package: @authloop/sdk ✅ (Skeleton complete)
+## Package: @authloop-ai/sdk ✅ (Skeleton complete)
 
 The SDK is a thin HTTP client. Core implementation is done in `packages/sdk/src/index.ts`:
 - `Authloop` class with `handoff()`, `getSession()`, `cancelSession()`, `resolveSession()`, `waitForResolution()`
@@ -12,25 +12,25 @@ The SDK is a thin HTTP client. Core implementation is done in `packages/sdk/src/
 - [ ] Add `types.ts` with hand-written wrappers if generated types need adaptation
 - [ ] Add unit tests (mock fetch, verify request/response mapping)
 - [ ] Add README.md with usage examples
-- [ ] Publish to npm as `@authloop/sdk`
+- [ ] Publish to npm as `@authloop-ai/sdk`
 
 ---
 
-## Package: @authloop/mcp 🔧 (Needs implementation)
+## Package: @authloop-ai/mcp 🔧 (Needs implementation)
 
 The MCP server is the primary integration point for OpenClaw users. It runs as a subprocess over stdio.
 
 ### Architecture
 
 ```
-OpenClaw launches @authloop/mcp as MCP subprocess
+OpenClaw launches @authloop-ai/mcp as MCP subprocess
   ↓
 MCP server registers `authloop_handoff` tool
   ↓
 Agent calls authloop_handoff when it hits an auth wall
   ↓
 MCP server:
-  1. Calls POST /session via @authloop/sdk → gets { session_url, stream_token }
+  1. Calls POST /session via @authloop-ai/sdk → gets { session_url, stream_token }
   2. Returns session_url to the agent (agent sends it to the human)
   3. Polls GET /session/:id until ACTIVE
   4. Joins the streaming room using stream_token
@@ -51,7 +51,7 @@ MCP server:
   Output: { session_url: string, status: "resolved" | "error" | "timeout" }
   ```
 - [ ] Read `AUTHLOOP_API_KEY` and `AUTHLOOP_BASE_URL` from environment
-- [ ] Create `@authloop/sdk` client instance on startup
+- [ ] Create `@authloop-ai/sdk` client instance on startup
 
 #### 2. Session Management (`src/session.ts`)
 - [ ] Call `authloop.handoff()` to create session
@@ -95,7 +95,7 @@ MCP server:
 
 ### Publishing
 - [ ] Add README.md with OpenClaw config example
-- [ ] Publish to npm as `@authloop/mcp`
+- [ ] Publish to npm as `@authloop-ai/mcp`
 - [ ] Submit to OpenClaw MCP registry
 
 ---

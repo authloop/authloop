@@ -8,8 +8,8 @@ Open source packages for integrating AuthLoop into AI agents. When an agent hits
 
 ```
 packages/
-  sdk/    → @authloop/sdk — TypeScript SDK for any agent/runtime
-  mcp/    → @authloop/mcp — MCP server for OpenClaw and compatible agents
+  sdk/    → @authloop-ai/sdk — TypeScript SDK for any agent/runtime
+  mcp/    → @authloop-ai/mcp — MCP server for OpenClaw and compatible agents
 ```
 
 This is a **public** repo. The AuthLoop API server and web app live in a separate private repo. These packages communicate with the API via REST only — they never share code with the server.
@@ -26,12 +26,12 @@ This is a **public** repo. The AuthLoop API server and web app live in a separat
 
 ## Packages
 
-### @authloop/sdk
+### @authloop-ai/sdk
 
 TypeScript HTTP client wrapping the AuthLoop REST API.
 
 ```ts
-import { AuthLoop } from '@authloop/sdk';
+import { AuthLoop } from '@authloop-ai/sdk';
 
 const auth = new AuthLoop({ apiKey: 'al_live_...' });
 const session = await auth.handoff({
@@ -46,7 +46,7 @@ const session = await auth.handoff({
 const result = await auth.waitForResolution(session.sessionId);
 ```
 
-### @authloop/mcp
+### @authloop-ai/mcp
 
 MCP server that exposes `authloop_handoff` as a tool. One line in `openclaw.json`:
 
@@ -56,7 +56,7 @@ MCP server that exposes `authloop_handoff` as a tool. One line in `openclaw.json
     "servers": {
       "authloop": {
         "command": "npx",
-        "args": ["-y", "@authloop/mcp"],
+        "args": ["-y", "@authloop-ai/mcp"],
         "env": { "AUTHLOOP_API_KEY": "al_live_..." }
       }
     }
@@ -130,15 +130,15 @@ Types are generated from the OpenAPI spec served by the AuthLoop API:
 pnpm codegen
 
 # From local dev API (running on port 8787)
-pnpm --filter @authloop/sdk codegen:local
-pnpm --filter @authloop/mcp codegen:local
+pnpm --filter @authloop-ai/sdk codegen:local
+pnpm --filter @authloop-ai/mcp codegen:local
 ```
 
 This fetches `/openapi.json` and generates `src/types.generated.ts` in each package. Never edit these files manually.
 
 ## Environment Variables
 
-### @authloop/mcp (set by developer)
+### @authloop-ai/mcp (set by developer)
 ```bash
 AUTHLOOP_API_KEY=al_live_...           # Required — API key from authloop.ai/dashboard
 AUTHLOOP_BASE_URL=https://api.authloop.ai  # Optional — override for local dev
@@ -172,6 +172,6 @@ pnpm codegen              # Regenerate types from OpenAPI spec
 
 ## Publishing
 
-Both packages are published to npm under the `@authloop` scope:
+Both packages are published to npm under the `@authloop-ai` scope:
 - `npm publish --access public` from each package directory
 - CI publishes on push to main (after types drift check passes)

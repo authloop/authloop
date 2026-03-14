@@ -8,8 +8,8 @@ AuthLoop is a human-in-the-loop authentication layer for AI agents. When your ag
 
 | Package | Description |
 |---------|-------------|
-| [`@authloop/sdk`](./packages/sdk) | TypeScript SDK for any agent runtime |
-| [`@authloop/mcp`](./packages/mcp) | MCP server for OpenClaw and compatible agents |
+| [`@authloop-ai/sdk`](./packages/sdk) | TypeScript SDK for any agent runtime |
+| [`@authloop-ai/mcp`](./packages/mcp) | MCP server for OpenClaw and compatible agents |
 
 ## Quick Start
 
@@ -23,7 +23,7 @@ Add to your `openclaw.json`:
     "servers": {
       "authloop": {
         "command": "npx",
-        "args": ["-y", "@authloop/mcp"],
+        "args": ["-y", "@authloop-ai/mcp"],
         "env": { "AUTHLOOP_API_KEY": "al_live_..." }
       }
     }
@@ -34,7 +34,7 @@ Add to your `openclaw.json`:
 ### Playwright / Any Agent (SDK)
 
 ```ts
-import { Authloop } from '@authloop/sdk';
+import { Authloop } from '@authloop-ai/sdk';
 
 const auth = new Authloop({ apiKey: 'al_live_...' });
 
