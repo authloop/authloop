@@ -68,7 +68,7 @@ describe.skipIf(!apiKey)("SDK integration tests (live API)", () => {
 
   it("returns 409 when resolving an already-cancelled session", async () => {
     const session = await client.handoff({
-      service: "Integration Test - Double Resolve",
+      service: "Integration Test - Resolve After Cancel",
       cdpUrl: "ws://localhost:9222",
     });
 
@@ -79,8 +79,8 @@ describe.skipIf(!apiKey)("SDK integration tests (live API)", () => {
       expect.fail("should have thrown");
     } catch (e) {
       expect(e).toBeInstanceOf(AuthloopError);
-      // Could be 409 (already terminal) or 410 (expired) depending on API behavior
-      expect([409, 410]).toContain((e as AuthloopError).status);
+      expect((e as AuthloopError).status).toBe(409);
+      expect((e as AuthloopError).code).toBe("already_terminal");
     }
   });
 
