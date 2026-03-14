@@ -1,106 +1,96 @@
 # Implementation Tasks
 
-## Package: @authloop-ai/sdk ✅ (Skeleton complete)
+## Package: @authloop-ai/sdk ✅
 
-The SDK is a thin HTTP client. Core implementation is done in `packages/sdk/src/index.ts`:
+The SDK is a thin HTTP client. Implementation is in `packages/sdk/src/index.ts`:
 - `Authloop` class with `handoff()`, `getSession()`, `cancelSession()`, `resolveSession()`, `waitForResolution()`
 - `AuthloopError` class with status code and error code
 - Camel case public API, snake_case wire format (matches API)
 
-### Remaining SDK tasks
+### SDK tasks
+- [x] Core implementation (all methods)
+- [x] `livekitUrl` field in `HandoffResult`
+- [x] Unit tests (17 tests — mock fetch, request/response mapping, error handling, polling)
+- [x] README.md with install, usage, full API reference
+- [x] package.json metadata (description, author, repo, keywords, publishConfig)
 - [ ] Run codegen to generate `types.generated.ts` from production OpenAPI spec
 - [ ] Add `types.ts` with hand-written wrappers if generated types need adaptation
-- [ ] Add unit tests (mock fetch, verify request/response mapping)
-- [ ] Add README.md with usage examples
-- [ ] Publish to npm as `@authloop-ai/sdk`
+- [ ] Integration test against real API
 
 ---
 
-## Package: @authloop-ai/mcp 🔧 (Needs implementation)
+## Package: @authloop-ai/mcp ✅
 
-The MCP server is the primary integration point for OpenClaw users. It runs as a subprocess over stdio.
+The MCP server is the primary integration point. Runs as a subprocess over stdio.
 
 ### Architecture
 
 ```
-OpenClaw launches @authloop-ai/mcp as MCP subprocess
+Agent calls authloop_handoff tool via MCP
   ↓
-MCP server registers `authloop_handoff` tool
+MCP server (src/index.ts):
+  1. Validates AUTHLOOP_API_KEY, creates SDK client
+  2. Registers authloop_handoff tool with Zod schema
+  3. Connects via StdioServerTransport
   ↓
-Agent calls authloop_handoff when it hits an auth wall
+Session lifecycle (src/session.ts):
+  1. Calls POST /session via SDK → gets session_url, stream_token, livekit_url
+  2. Polls GET /session/:id every 3s until ACTIVE or terminal
+  3. All 5 states handled: PENDING (poll), ACTIVE (stream), RESOLVED/TIMEOUT/ERROR (return)
   ↓
-MCP server:
-  1. Calls POST /session via @authloop-ai/sdk → gets { session_url, stream_token }
-  2. Returns session_url to the agent (agent sends it to the human)
-  3. Polls GET /session/:id until ACTIVE
-  4. Joins the streaming room using stream_token
-  5. Captures CDP screencast frames and publishes them as video
-  6. Receives keystrokes from the human via data channel
-  7. Dispatches keystrokes to the browser via CDP Input.dispatchKeyEvent
-  8. On login completion: calls POST /session/:id/resolve, then disconnects
-  9. Returns success to the agent
+Browser streaming (src/stream.ts + src/cdp.ts):
+  1. CDP WebSocket client connects to browser
+  2. Starts Page.screencastFrame → decode JPEG → RGBA VideoFrame → LiveKit publish
+  3. Receives keystrokes via LiveKit dataReceived → CDP Input.dispatchKeyEvent
+  4. Waits for { type: "resolved" } message → resolves session → disconnects
 ```
 
-### MCP Implementation Tasks
-
-#### 1. MCP Server Setup
-- [ ] Implement MCP server using `@modelcontextprotocol/sdk`
-- [ ] Register `authloop_handoff` tool with schema:
-  ```
-  Input: { service: string, cdp_url: string, context?: { url?, blocker_type?, hint? } }
-  Output: { session_url: string, status: "resolved" | "error" | "timeout" }
-  ```
-- [ ] Read `AUTHLOOP_API_KEY` and `AUTHLOOP_BASE_URL` from environment
-- [ ] Create `@authloop-ai/sdk` client instance on startup
-
-#### 2. Session Management (`src/session.ts`)
-- [ ] Call `authloop.handoff()` to create session
-- [ ] Return `session_url` to the agent immediately (agent notifies the human)
-- [ ] Poll `authloop.getSession()` every 3s until ACTIVE or terminal
-- [ ] Handle TIMEOUT and ERROR states gracefully
-- [ ] On ACTIVE: start streaming (see step 3)
-
-#### 3. Browser Streaming (`src/stream.ts`)
-- [ ] Connect to streaming room using stream token and `@livekit/rtc-node`
-- [ ] Start CDP screencast via `Page.startScreencast` on the cdp_url
-- [ ] Convert CDP screencast frames (JPEG) to video track
-- [ ] Publish video track to the room
-- [ ] Subscribe to data channel for incoming keystrokes from the human
-
-#### 4. Keystroke Dispatch
-- [ ] Parse keystroke messages from data channel: `{ type: "keydown"|"keypress", key: string }`
-- [ ] For `keypress`: dispatch `Input.dispatchKeyEvent` with type `keyDown` + `char` + `keyUp`
-- [ ] For `keydown` (special keys): dispatch `Input.dispatchKeyEvent` for Enter, Tab, Backspace, etc.
-- [ ] Handle modifier keys if needed (Shift, Ctrl)
-
-#### 5. Clean Disconnect Protocol
-- [ ] On successful login detection (or agent request):
-  1. Send `{ type: "resolved" }` via data channel to notify human's browser
-  2. Call `POST /session/:id/resolve` to set explicit_resolve flag
-  3. Disconnect from room
-  4. Return success to agent
-- [ ] On error/crash: room disconnect without resolve → API sets ERROR status via webhook
-
-#### 6. Error Handling
-- [ ] Handle CDP connection failures
-- [ ] Handle streaming room connection failures
-- [ ] Handle API errors (401, 402, 429)
-- [ ] Timeout handling (session TTL expiry)
-- [ ] Graceful shutdown on SIGTERM/SIGINT
-
-### Testing
-- [ ] Unit tests for session management logic
-- [ ] Integration test: create session → poll → verify status
-- [ ] Manual test with OpenClaw against a real auth wall
-
-### Publishing
-- [ ] Add README.md with OpenClaw config example
-- [ ] Publish to npm as `@authloop-ai/mcp`
-- [ ] Submit to OpenClaw MCP registry
+### MCP tasks
+- [x] MCP server setup with `@modelcontextprotocol/sdk`
+- [x] `authloop_handoff` tool registration with Zod input schema
+- [x] Environment validation (AUTHLOOP_API_KEY required, AUTHLOOP_BASE_URL optional)
+- [x] Session lifecycle: create → poll → stream → resolve
+- [x] All poll states handled correctly (PENDING/ACTIVE/RESOLVED/TIMEOUT/ERROR)
+- [x] CDP WebSocket client (`src/cdp.ts`) with command tracking + event dispatch
+- [x] LiveKit video bridge (`src/stream.ts`) — screencast → JPEG decode → VideoFrame
+- [x] Keystroke dispatch from human → CDP Input.dispatchKeyEvent
+- [x] Resolution detection via LiveKit data channel
+- [x] Clean disconnect protocol (resolve → stop stream → disconnect)
+- [x] Graceful shutdown on SIGINT/SIGTERM
+- [x] Concurrency guard (reject second handoff while one is active)
+- [x] Unit tests — CDP client (8 tests), session logic (8 tests)
+- [x] README.md with MCP config example + tool schema
+- [x] package.json metadata + publishConfig
+- [ ] Integration test: real API + browser with CDP
+- [ ] Manual test with Claude Desktop / OpenClaw against a real auth wall
 
 ---
 
-## CI/CD Tasks
-- [ ] GitHub Action: on push to main, regenerate types from production spec
-- [ ] Fail CI if `types.generated.ts` changed without being committed
-- [ ] Auto-publish to npm on version tag
+## Repo & Publishing ✅
+
+- [x] MIT LICENSE file
+- [x] Root README with quick start, contributing link
+- [x] CONTRIBUTING.md with dev setup, changeset instructions
+- [x] CODE_OF_CONDUCT.md (Contributor Covenant)
+- [x] Changesets for versioning (`@changesets/cli` + `@changesets/changelog-github`)
+- [x] Fixed versioning (SDK + MCP always share version number)
+- [x] GitHub Actions CI — build + typecheck + test on Node 18/20/22
+- [x] GitHub Actions Release — changesets/action for automated publish
+- [x] `pnpm changeset` / `pnpm version-packages` / `pnpm release` scripts
+
+---
+
+## Remaining work
+
+### Before first publish
+- [ ] Run codegen against production API (`pnpm codegen`) — needs API serving `/openapi.json`
+- [ ] Integration test with real AuthLoop API
+- [ ] Manual E2E test: agent → MCP → API → human resolves → agent continues
+- [ ] Set `NPM_TOKEN` secret in GitHub repo settings
+- [ ] Create first changeset and publish v0.1.0
+
+### Future
+- [ ] GitHub Action: regenerate types on push to main, fail CI if types drifted
+- [ ] Submit to MCP server registries (Claude Desktop, OpenClaw)
+- [ ] Add timeout handling during streaming (session TTL expiry while stream is active)
+- [ ] Reconnect logic if LiveKit connection drops mid-stream
