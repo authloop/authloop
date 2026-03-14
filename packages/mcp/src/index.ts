@@ -32,12 +32,17 @@ server.registerTool(
   "authloop_handoff",
   {
     description:
-      "Hand off an authentication challenge (OTP, captcha, password) to a human. " +
-      "Creates a live session where the human can see the browser and type credentials. " +
-      "Returns when the human completes the auth or the session times out.",
+      "Hand off a login or auth challenge (OTP, captcha, password) to a human who can resolve it remotely. " +
+      "The human sees the live browser, types the credentials, and the agent continues automatically.",
     inputSchema: {
       service: z.string().describe("Name of the service requiring auth (e.g. 'HDFC NetBanking')"),
-      cdp_url: z.string().describe("Chrome DevTools Protocol WebSocket URL (e.g. ws://localhost:9222)"),
+      cdp_url: z
+        .string()
+        .describe(
+          "CDP endpoint of the browser to screencast. " +
+          "Accepts HTTP (http://127.0.0.1:18800) or WebSocket (ws://127.0.0.1:18800/devtools/page/...) URLs. " +
+          "HTTP endpoints are auto-resolved via /json/version.",
+        ),
       context: z
         .object({
           url: z.string().optional().describe("Current page URL"),

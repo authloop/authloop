@@ -1,5 +1,8 @@
 /**
  * Thin CDP WebSocket client. Uses native WebSocket (Node 22+).
+ * Supports both direct WebSocket URLs (ws://, wss://) and HTTP-based CDP
+ * endpoints (http://, https://) — auto-discovers the WebSocket debugger URL
+ * via /json/version for HTTP endpoints.
  * No auto-reconnect — a CDP drop means the session is dead.
  */
 
@@ -14,6 +17,37 @@ type PendingCall = {
 
 type EventHandler = (params: Record<string, unknown>) => void;
 
+/**
+ * Resolves a CDP URL to a WebSocket URL.
+ * - ws:// / wss:// URLs are returned as-is.
+ * - http:// / https:// URLs are treated as CDP HTTP endpoints — we call
+ *   /json/version to discover the webSocketDebuggerUrl.
+ */
+async function resolveWebSocketUrl(cdpUrl: string): Promise<string> {
+  if (cdpUrl.startsWith("ws://") || cdpUrl.startsWith("wss://")) {
+    debug("CDP URL is already WebSocket: %s", cdpUrl);
+    return cdpUrl;
+  }
+
+  // HTTP-based CDP endpoint — discover WebSocket URL via /json/version
+  const base = cdpUrl.replace(/\/+$/, "");
+  const versionUrl = `${base}/json/version`;
+  debug("discovering WebSocket URL from %s", versionUrl);
+
+  const res = await fetch(versionUrl);
+  if (!res.ok) {
+    throw new Error(`CDP discovery failed: ${versionUrl} returned ${res.status}`);
+  }
+
+  const data = (await res.json()) as { webSocketDebuggerUrl?: string };
+  if (!data.webSocketDebuggerUrl) {
+    throw new Error(`CDP discovery: no webSocketDebuggerUrl in ${versionUrl} response`);
+  }
+
+  debug("discovered WebSocket URL: %s", data.webSocketDebuggerUrl);
+  return data.webSocketDebuggerUrl;
+}
+
 export class CdpClient {
   private ws: WebSocket | null = null;
   private nextId = 1;
@@ -24,10 +58,11 @@ export class CdpClient {
   constructor(private cdpUrl: string) {}
 
   async connect(): Promise<void> {
-    debug("connecting to %s", this.cdpUrl);
+    const wsUrl = await resolveWebSocketUrl(this.cdpUrl);
+    debug("connecting to %s", wsUrl);
 
     return new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(this.cdpUrl);
+      const ws = new WebSocket(wsUrl);
       this.ws = ws;
 
       ws.addEventListener("open", () => {
