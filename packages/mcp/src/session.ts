@@ -54,7 +54,11 @@ export async function runHandoff(
     }
 
     if (status.status !== "ACTIVE") {
-      return { sessionUrl: session.sessionUrl, status: status.status === "RESOLVED" ? "resolved" : "error" };
+      const mapped: StreamResult =
+        status.status === "RESOLVED" ? "resolved" :
+        status.status === "TIMEOUT" ? "timeout" :
+        "error";
+      return { sessionUrl: session.sessionUrl, status: mapped };
     }
 
     // 3. Start browser stream

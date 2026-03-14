@@ -106,6 +106,14 @@ describe("runHandoff()", () => {
     expect(result.status).toBe("resolved");
   });
 
+  it("returns timeout status when session goes to TIMEOUT", async () => {
+    const client = createMockClient({ pollSequence: ["TIMEOUT"] });
+
+    const result = await runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
+
+    expect(result.status).toBe("timeout");
+  });
+
   it("rejects concurrent handoffs", async () => {
     const client = createMockClient();
 
