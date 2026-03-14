@@ -46,8 +46,30 @@ export class BrowserStream {
 
     // Connect to LiveKit room
     debug("connecting to LiveKit: %s", this.opts.streamUrl);
+    debug("stream token (first 20 chars): %s...", this.opts.streamToken.slice(0, 20));
     this.room = new Room();
-    await this.room.connect(this.opts.streamUrl, this.opts.streamToken);
+
+    // Decode JWT payload for debugging (no validation, just inspect)
+    try {
+      const payload = JSON.parse(Buffer.from(this.opts.streamToken.split(".")[1], "base64url").toString());
+      debug("token payload: room=%s sub=%s exp=%s", payload.video?.room, payload.sub, payload.exp ? new Date(payload.exp * 1000).toISOString() : "none");
+    } catch {
+      debug("could not decode token payload");
+    }
+
+    const connectTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("LiveKit connection timed out after 15s")), 15000),
+    );
+
+    try {
+      await Promise.race([
+        this.room.connect(this.opts.streamUrl, this.opts.streamToken),
+        connectTimeout,
+      ]);
+    } catch (err) {
+      debug("LiveKit connect failed: %s", (err as Error).message);
+      throw err;
+    }
     debug("LiveKit connected");
 
     // Set up video source and publish track

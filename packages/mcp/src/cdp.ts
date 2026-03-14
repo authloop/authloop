@@ -18,10 +18,11 @@ type PendingCall = {
 type EventHandler = (params: Record<string, unknown>) => void;
 
 /**
- * Resolves a CDP URL to a WebSocket URL.
- * - ws:// / wss:// URLs are returned as-is.
+ * Resolves a CDP URL to a page-level WebSocket URL.
+ * - ws:// / wss:// URLs are returned as-is (assumed to be a page target).
  * - http:// / https:// URLs are treated as CDP HTTP endpoints — we call
- *   /json/version to discover the webSocketDebuggerUrl.
+ *   /json to find the first "page" target and use its webSocketDebuggerUrl.
+ *   Falls back to /json/version (browser-level) if no page targets exist.
  */
 async function resolveWebSocketUrl(cdpUrl: string): Promise<string> {
   if (cdpUrl.startsWith("ws://") || cdpUrl.startsWith("wss://")) {
@@ -29,11 +30,34 @@ async function resolveWebSocketUrl(cdpUrl: string): Promise<string> {
     return cdpUrl;
   }
 
-  // HTTP-based CDP endpoint — discover WebSocket URL via /json/version
   const base = cdpUrl.replace(/\/+$/, "");
+
+  // Try /json first to get a page-level target (required for Page.startScreencast)
+  try {
+    const listUrl = `${base}/json`;
+    debug("discovering page targets from %s", listUrl);
+    const res = await fetch(listUrl);
+    if (res.ok) {
+      const targets = (await res.json()) as Array<{
+        type?: string;
+        webSocketDebuggerUrl?: string;
+        url?: string;
+        title?: string;
+      }>;
+      const page = targets.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
+      if (page) {
+        debug("discovered page target: %s (%s)", page.title ?? page.url, page.webSocketDebuggerUrl);
+        return page.webSocketDebuggerUrl!;
+      }
+      debug("no page targets found, falling back to /json/version");
+    }
+  } catch {
+    debug("/json failed, falling back to /json/version");
+  }
+
+  // Fallback: browser-level endpoint
   const versionUrl = `${base}/json/version`;
   debug("discovering WebSocket URL from %s", versionUrl);
-
   const res = await fetch(versionUrl);
   if (!res.ok) {
     throw new Error(`CDP discovery failed: ${versionUrl} returned ${res.status}`);
@@ -44,7 +68,7 @@ async function resolveWebSocketUrl(cdpUrl: string): Promise<string> {
     throw new Error(`CDP discovery: no webSocketDebuggerUrl in ${versionUrl} response`);
   }
 
-  debug("discovered WebSocket URL: %s", data.webSocketDebuggerUrl);
+  debug("discovered browser WebSocket URL: %s", data.webSocketDebuggerUrl);
   return data.webSocketDebuggerUrl;
 }
 
