@@ -42,7 +42,7 @@ const result = await auth.waitForResolution(session.sessionId);
 
 ### `authloop.handoff(options)`
 
-Creates a handoff session. Returns `{ sessionId, sessionUrl, streamToken, livekitUrl, expiresAt }`.
+Creates a handoff session. Returns `{ sessionId, sessionUrl, streamToken, streamUrl, expiresAt }`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

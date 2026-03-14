@@ -21,7 +21,7 @@ function createMockClient(opts?: {
       sessionId: "sess_123",
       sessionUrl: "https://app.authloop.ai/s/sess_123",
       streamToken: "tok_abc",
-      livekitUrl: "wss://lk.authloop.ai",
+      streamUrl: "wss://lk.authloop.ai",
       expiresAt: "2026-03-14T12:00:00Z",
     }),
     getSession: vi.fn().mockImplementation(() => {

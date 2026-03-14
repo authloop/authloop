@@ -20,7 +20,7 @@ describe("Authloop", () => {
     it("uses default base URL", () => {
       const c = new Authloop({ apiKey: "k" });
       // Verify by making a call and checking the URL
-      const spy = mockFetch(200, { session_id: "s1", session_url: "u", stream_token: "t", livekit_url: "lk", expires_at: "e" });
+      const spy = mockFetch(200, { session_id: "s1", session_url: "u", stream_token: "t", stream_url: "lk", expires_at: "e" });
       vi.stubGlobal("fetch", spy);
       c.handoff({ service: "test", cdpUrl: "ws://x" });
       expect(spy).toHaveBeenCalledWith("https://api.authloop.ai/session", expect.anything());
@@ -28,7 +28,7 @@ describe("Authloop", () => {
 
     it("uses custom base URL", () => {
       const c = new Authloop({ apiKey: "k", baseUrl: "http://localhost:8787" });
-      const spy = mockFetch(200, { session_id: "s1", session_url: "u", stream_token: "t", livekit_url: "lk", expires_at: "e" });
+      const spy = mockFetch(200, { session_id: "s1", session_url: "u", stream_token: "t", stream_url: "lk", expires_at: "e" });
       vi.stubGlobal("fetch", spy);
       c.handoff({ service: "test", cdpUrl: "ws://x" });
       expect(spy).toHaveBeenCalledWith("http://localhost:8787/session", expect.anything());
@@ -41,7 +41,7 @@ describe("Authloop", () => {
         session_id: "sess_123",
         session_url: "https://app.authloop.ai/s/sess_123",
         stream_token: "tok_abc",
-        livekit_url: "wss://lk.authloop.ai",
+        stream_url: "wss://lk.authloop.ai",
         expires_at: "2026-03-14T12:00:00Z",
       });
       vi.stubGlobal("fetch", spy);
@@ -70,7 +70,7 @@ describe("Authloop", () => {
         session_id: "sess_123",
         session_url: "https://app.authloop.ai/s/sess_123",
         stream_token: "tok_abc",
-        livekit_url: "wss://lk.authloop.ai",
+        stream_url: "wss://lk.authloop.ai",
         expires_at: "2026-03-14T12:00:00Z",
       }));
 
@@ -80,14 +80,14 @@ describe("Authloop", () => {
         sessionId: "sess_123",
         sessionUrl: "https://app.authloop.ai/s/sess_123",
         streamToken: "tok_abc",
-        livekitUrl: "wss://lk.authloop.ai",
+        streamUrl: "wss://lk.authloop.ai",
         expiresAt: "2026-03-14T12:00:00Z",
       });
     });
 
     it("omits context when not provided", async () => {
       const spy = mockFetch(200, {
-        session_id: "s", session_url: "u", stream_token: "t", livekit_url: "l", expires_at: "e",
+        session_id: "s", session_url: "u", stream_token: "t", stream_url: "l", expires_at: "e",
       });
       vi.stubGlobal("fetch", spy);
 

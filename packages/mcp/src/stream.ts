@@ -27,7 +27,7 @@ export class BrowserStream {
 
   constructor(
     private opts: {
-      livekitUrl: string;
+      streamUrl: string;
       streamToken: string;
       cdpUrl: string;
     },
@@ -40,7 +40,7 @@ export class BrowserStream {
 
     // Connect to LiveKit room
     this.room = new Room();
-    await this.room.connect(this.opts.livekitUrl, this.opts.streamToken);
+    await this.room.connect(this.opts.streamUrl, this.opts.streamToken);
 
     // Set up video source and publish track
     this.videoSource = new VideoSource(1280, 720);

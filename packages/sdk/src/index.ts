@@ -18,7 +18,7 @@ export interface HandoffResult {
   sessionId: string;
   sessionUrl: string;
   streamToken: string;
-  livekitUrl: string;
+  streamUrl: string;
   expiresAt: string;
 }
 
@@ -28,7 +28,7 @@ export interface SessionStatus {
   service: string;
   context?: {
     url?: string;
-    blocker_type?: string;
+    blocker_type?: "otp" | "password" | "captcha" | "security_question" | "document_upload" | "other";
     hint?: string;
   };
   createdAt: string;
@@ -75,7 +75,7 @@ export class Authloop {
       sessionId: data.session_id!,
       sessionUrl: data.session_url!,
       streamToken: data.stream_token!,
-      livekitUrl: data.livekit_url!,
+      streamUrl: data.stream_url!,
       expiresAt: data.expires_at!,
     };
   }

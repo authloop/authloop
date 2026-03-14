@@ -63,7 +63,7 @@ export async function runHandoff(
 
     // 3. Start browser stream
     stream = new BrowserStream({
-      livekitUrl: session.livekitUrl,
+      streamUrl: session.streamUrl,
       streamToken: session.streamToken,
       cdpUrl: options.cdpUrl,
     });

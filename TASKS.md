@@ -9,7 +9,7 @@ The SDK is a thin HTTP client. Implementation is in `packages/sdk/src/index.ts`:
 
 ### SDK tasks
 - [x] Core implementation (all methods)
-- [x] `livekitUrl` field in `HandoffResult`
+- [x] `streamUrl` field in `HandoffResult`
 - [x] Unit tests (17 tests — mock fetch, request/response mapping, error handling, polling)
 - [x] README.md with install, usage, full API reference
 - [x] package.json metadata (description, author, repo, keywords, publishConfig)
@@ -34,7 +34,7 @@ MCP server (src/index.ts):
   3. Connects via StdioServerTransport
   ↓
 Session lifecycle (src/session.ts):
-  1. Calls POST /session via SDK → gets session_url, stream_token, livekit_url
+  1. Calls POST /session via SDK → gets session_id, session_url, stream_token, stream_url
   2. Polls GET /session/:id every 3s until ACTIVE or terminal
   3. All 5 states handled: PENDING (poll), ACTIVE (stream), RESOLVED/TIMEOUT/ERROR (return)
   ↓
