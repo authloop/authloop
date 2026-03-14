@@ -23,8 +23,8 @@
     "captcha",
     "ai-agents",
     "human-in-the-loop",
-    "livekit",
-    "cdp"
+    "cdp",
+    "websocket"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -48,10 +48,8 @@
   },
   "dependencies": {
     "@authloop-ai/sdk": "workspace:*",
-    "@livekit/rtc-node": "^0.13.3",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "debug": "^4.4.3",
-    "jpeg-js": "^0.4.4",
     "zod": "^3.25.0"
   },
   "devDependencies": {

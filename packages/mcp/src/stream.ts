@@ -1,20 +1,11 @@
 /**
- * LiveKit + CDP bridge.
- * Captures browser screencast frames via CDP, publishes them as a LiveKit video track.
- * Receives keystrokes from the human via LiveKit data channel, dispatches to browser via CDP.
+ * WebSocket + CDP bridge.
+ * Captures browser screencast frames via CDP, sends them as binary JPEG over WebSocket.
+ * Receives input events (clicks, keystrokes, scroll) from the human via WebSocket,
+ * dispatches them to the browser via CDP.
  */
 
 import createDebug from "debug";
-import {
-  Room,
-  RoomEvent,
-  LocalVideoTrack,
-  VideoSource,
-  VideoFrame,
-  VideoBufferType,
-  TrackPublishOptions,
-} from "@livekit/rtc-node";
-import { decode } from "jpeg-js";
 import { CdpClient } from "./cdp.js";
 
 const debug = createDebug("authloop:stream");
@@ -22,9 +13,8 @@ const debug = createDebug("authloop:stream");
 export type StreamResult = "resolved" | "error" | "timeout";
 
 export class BrowserStream {
-  private room: Room | null = null;
+  private ws: WebSocket | null = null;
   private cdp: CdpClient | null = null;
-  private videoSource: VideoSource | null = null;
   private resolveWait: ((result: StreamResult) => void) | null = null;
   private stopped = false;
   private frameCount = 0;
@@ -38,85 +28,61 @@ export class BrowserStream {
   ) {}
 
   async start(): Promise<void> {
-    // Connect to CDP
+    // 1. Connect to CDP
     debug("connecting to CDP: %s", this.opts.cdpUrl);
     this.cdp = new CdpClient(this.opts.cdpUrl);
     await this.cdp.connect();
     debug("CDP connected");
 
-    // Connect to LiveKit room
-    debug("connecting to LiveKit: %s", this.opts.streamUrl);
-    debug("stream token (first 20 chars): %s...", this.opts.streamToken.slice(0, 20));
-    this.room = new Room();
+    // 2. Connect WebSocket to stream relay
+    const wsUrl = `${this.opts.streamUrl}?token=${encodeURIComponent(this.opts.streamToken)}&role=agent`;
+    debug("connecting to relay: %s", this.opts.streamUrl);
+    await this.connectWebSocket(wsUrl);
+    debug("relay connected");
 
-    // Decode JWT payload for debugging (no validation, just inspect)
-    try {
-      const payload = JSON.parse(Buffer.from(this.opts.streamToken.split(".")[1], "base64url").toString());
-      debug("token payload: room=%s sub=%s exp=%s", payload.video?.room, payload.sub, payload.exp ? new Date(payload.exp * 1000).toISOString() : "none");
-    } catch {
-      debug("could not decode token payload");
-    }
-
-    const connectTimeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("LiveKit connection timed out after 15s")), 15000),
-    );
-
-    try {
-      await Promise.race([
-        this.room.connect(this.opts.streamUrl, this.opts.streamToken),
-        connectTimeout,
-      ]);
-    } catch (err) {
-      debug("LiveKit connect failed: %s", (err as Error).message);
-      throw err;
-    }
-    debug("LiveKit connected");
-
-    // Set up video source and publish track
-    this.videoSource = new VideoSource(1280, 720);
-    const track = LocalVideoTrack.createVideoTrack("screen", this.videoSource);
-    await this.room.localParticipant!.publishTrack(track, new TrackPublishOptions());
-    debug("video track published");
-
-    // Listen for keystrokes from human via data channel
-    this.room.on(
-      RoomEvent.DataReceived,
-      (payload: Uint8Array, _participant, _kind, topic) => {
-        if (this.stopped) return;
-
-        const message = JSON.parse(new TextDecoder().decode(payload)) as Record<string, unknown>;
-
-        if (topic === "keystrokes") {
-          debug("keystroke received: type=%s key=%s", message.type, message.key);
-          this.handleKeystroke(message);
+    // 3. Listen for messages from the relay (input events + control)
+    this.ws!.addEventListener("message", (event) => {
+      if (this.stopped) return;
+      if (typeof event.data === "string") {
+        try {
+          const msg = JSON.parse(event.data) as Record<string, unknown>;
+          this.handleMessage(msg);
+        } catch {
+          debug("failed to parse message: %s", String(event.data).slice(0, 100));
         }
+      }
+    });
 
-        if (message.type === "resolved") {
-          debug("resolution signal received");
-          this.resolveWait?.("resolved");
+    this.ws!.addEventListener("close", () => {
+      if (!this.stopped) {
+        debug("relay WebSocket closed unexpectedly");
+        this.resolveWait?.("error");
+      }
+    });
+
+    // 4. Forward CDP screencast frames as binary JPEG
+    this.cdp.on("Page.screencastFrame", (params: Record<string, unknown>) => {
+      if (this.stopped) return;
+
+      const sessionId = params.sessionId as number;
+      const data = params.data as string;
+
+      // ACK so CDP sends the next frame
+      this.cdp?.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
+
+      // Send raw JPEG bytes over WebSocket
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        const jpegBuffer = Buffer.from(data, "base64");
+        this.ws.send(jpegBuffer);
+        this.frameCount++;
+
+        if (this.frameCount % 100 === 0) {
+          debug("sent %d frames", this.frameCount);
         }
-      },
-    );
+      }
+    });
 
-    // Listen for CDP screencast frames
-    this.cdp.on(
-      "Page.screencastFrame",
-      (params: Record<string, unknown>) => {
-        if (this.stopped) return;
-
-        const sessionId = params.sessionId as number;
-        const data = params.data as string;
-        const metadata = params.metadata as { deviceWidth?: number; deviceHeight?: number } | undefined;
-
-        // Ack the frame to keep receiving
-        this.cdp?.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
-
-        // Decode JPEG and publish as video frame
-        this.publishFrame(data, metadata?.deviceWidth, metadata?.deviceHeight);
-      },
-    );
-
-    // Start screencast
+    // 5. Start screencast
     await this.cdp.send("Page.startScreencast", {
       format: "jpeg",
       quality: 60,
@@ -140,70 +106,114 @@ export class BrowserStream {
   async stop(): Promise<void> {
     if (this.stopped) return;
     this.stopped = true;
-    debug("stopping stream (published %d frames)", this.frameCount);
+    debug("stopping stream (sent %d frames)", this.frameCount);
 
-    try {
-      await this.cdp?.send("Page.stopScreencast").catch(() => {});
-    } catch {
-      // ignore
-    }
-
+    this.cdp?.send("Page.stopScreencast").catch(() => {});
     this.cdp?.close();
     this.cdp = null;
 
-    await this.videoSource?.close();
-    this.videoSource = null;
-
-    await this.room?.disconnect();
-    this.room = null;
+    this.ws?.close();
+    this.ws = null;
     debug("stream stopped");
   }
 
-  private publishFrame(base64Data: string, width?: number, height?: number): void {
-    if (!this.videoSource || this.stopped) return;
+  private async connectWebSocket(url: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const ws = new WebSocket(url);
+      this.ws = ws;
 
-    try {
-      const jpegBuffer = Buffer.from(base64Data, "base64");
-      const decoded = decode(jpegBuffer, { useTArray: true });
+      const timeout = setTimeout(() => {
+        ws.close();
+        reject(new Error("WebSocket connection timed out after 15s"));
+      }, 15000);
 
-      const frameWidth = width ?? decoded.width;
-      const frameHeight = height ?? decoded.height;
+      ws.addEventListener("open", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
 
-      const frame = new VideoFrame(
-        new Uint8Array(decoded.data),
-        frameWidth,
-        frameHeight,
-        VideoBufferType.RGBA,
-      );
-      this.videoSource.captureFrame(frame);
-      this.frameCount++;
+      ws.addEventListener("error", (e) => {
+        clearTimeout(timeout);
+        reject(new Error(`WebSocket error: ${(e as ErrorEvent).message ?? "connection failed"}`));
+      });
+    });
+  }
 
-      if (this.frameCount % 100 === 0) {
-        debug("published %d frames", this.frameCount);
-      }
-    } catch {
-      // Skip malformed frames
+  private handleMessage(msg: Record<string, unknown>): void {
+    const type = msg.type as string;
+    debug("received: %s", type);
+
+    switch (type) {
+      case "click":
+      case "dblclick":
+        this.dispatchMouseClick(msg);
+        break;
+      case "keydown":
+      case "keyup":
+      case "keypress":
+        this.dispatchKeyEvent(msg);
+        break;
+      case "scroll":
+        this.dispatchScroll(msg);
+        break;
+      case "resolved":
+        this.resolveWait?.("resolved");
+        break;
+      case "session_expired":
+        debug("session expired");
+        this.resolveWait?.("timeout");
+        break;
+      case "session_cancelled":
+        debug("session cancelled");
+        this.resolveWait?.("error");
+        break;
+      case "viewer_connected":
+        debug("viewer connected");
+        break;
+      case "viewer_disconnected":
+        debug("viewer disconnected");
+        break;
     }
   }
 
-  private handleKeystroke(message: Record<string, unknown>): void {
+  private dispatchMouseClick(msg: Record<string, unknown>): void {
     if (!this.cdp) return;
-
-    const type = message.type as string;
-    const key = message.key as string | undefined;
-    const code = message.code as string | undefined;
-    const text = message.text as string | undefined;
-
-    // Map to CDP Input.dispatchKeyEvent
-    const cdpType = type === "keydown" ? "keyDown" : type === "keyup" ? "keyUp" : "char";
+    const x = msg.x as number;
+    const y = msg.y as number;
+    const button = (msg.button as string) || "left";
+    const clickCount = msg.type === "dblclick" ? 2 : 1;
 
     this.cdp
-      .send("Input.dispatchKeyEvent", {
-        type: cdpType,
-        key,
-        code,
-        text: text ?? (cdpType === "char" ? key : undefined),
-      })
+      .send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, clickCount })
+      .then(() => this.cdp?.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button, clickCount }))
+      .catch(() => {});
+  }
+
+  private dispatchKeyEvent(msg: Record<string, unknown>): void {
+    if (!this.cdp) return;
+    const type = msg.type as string;
+    const key = msg.key as string | undefined;
+    const code = msg.code as string | undefined;
+
+    if (type === "keypress") {
+      // Character input
+      this.cdp.send("Input.dispatchKeyEvent", { type: "char", text: key }).catch(() => {});
+    } else if (type === "keydown") {
+      this.cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key, code }).catch(() => {});
+    } else if (type === "keyup") {
+      this.cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key, code }).catch(() => {});
+    }
+  }
+
+  private dispatchScroll(msg: Record<string, unknown>): void {
+    if (!this.cdp) return;
+    const x = msg.x as number;
+    const y = msg.y as number;
+    const deltaX = (msg.deltaX as number) || 0;
+    const deltaY = (msg.deltaY as number) || 0;
+
+    this.cdp
+      .send("Input.dispatchMouseEvent", { type: "mouseWheel", x, y, deltaX, deltaY })
       .catch(() => {});
   }
 }
