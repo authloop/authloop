@@ -1,0 +1,26 @@
+{
+  "name": "@authloop/mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "authloop-mcp": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "check-types": "tsc --noEmit",
+    "codegen": "tsx scripts/generate.ts",
+    "codegen:local": "AUTHLOOP_OPENAPI_URL=http://localhost:8787/openapi.json tsx scripts/generate.ts"
+  },
+  "dependencies": {
+    "@authloop/sdk": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@livekit/rtc-node": "^0.13.3"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.8.0",
+    "tsx": "^4.19.4",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@authloop/sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "check-types": "tsc --noEmit",
+    "codegen": "tsx scripts/generate.ts",
+    "codegen:local": "AUTHLOOP_OPENAPI_URL=http://localhost:8787/openapi.json tsx scripts/generate.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "openapi-typescript": "^7.8.0",
+    "tsx": "^4.19.4",
+    "typescript": "5.9.3"
+  }
+}
