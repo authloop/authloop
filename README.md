@@ -82,10 +82,6 @@ Sign up at [authloop.ai](https://authloop.ai) → Dashboard → API Keys.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and guidelines.
 
-## Changelog
-
-See [CHANGELOG.md](./CHANGELOG.md) for release history.
-
 ## License
 
 [MIT](./LICENSE)

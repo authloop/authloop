@@ -156,7 +156,11 @@ AUTHLOOP_OPENAPI_URL=https://api.authloop.ai/openapi.json  # Default
 pnpm install              # Install all dependencies
 pnpm build                # Build all packages
 pnpm check-types          # Type-check all packages
+pnpm test                 # Run all tests
 pnpm codegen              # Regenerate types from OpenAPI spec
+pnpm changeset            # Create a changeset for your changes
+pnpm version-packages     # Apply changesets: bump versions + update changelogs
+pnpm release              # Build, test, and publish to npm
 ```
 
 ## Development
@@ -172,6 +176,23 @@ pnpm codegen              # Regenerate types from OpenAPI spec
 
 ## Publishing
 
-Both packages are published to npm under the `@authloop-ai` scope:
-- `npm publish --access public` from each package directory
-- CI publishes on push to main (after types drift check passes)
+This repo uses [changesets](https://github.com/changesets/changesets) for versioning and publishing. Both packages are published to npm under the `@authloop-ai` scope with `"fixed"` versioning (they always share the same version number).
+
+### How to release a new version
+
+1. **Add a changeset** — run `pnpm changeset` and follow the prompts. Pick the affected packages, choose a semver bump (patch/minor/major), and write a summary. This creates a markdown file in `.changeset/`.
+2. **Commit and push** — include the changeset file in your PR. CI will pass as normal.
+3. **Merge to main** — the `changesets/action` GitHub Action detects pending changesets and opens a "Version Packages" PR. This PR bumps versions in `package.json`, updates `CHANGELOG.md` in each package, and consumes the changeset files.
+4. **Merge the Version Packages PR** — this triggers the action again, which runs `pnpm release` (build → test → `changeset publish`) and publishes both packages to npm.
+
+### Manual release (if needed)
+
+```bash
+pnpm changeset          # create a changeset
+pnpm version-packages   # bump versions + update changelogs
+pnpm release            # build, test, publish to npm
+```
+
+### Required secrets
+
+- `NPM_TOKEN` — npm access token with publish permission for `@authloop-ai` scope. Set in GitHub repo Settings → Secrets.

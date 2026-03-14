@@ -28,7 +28,12 @@ packages/
 2. Make your changes
 3. Add or update tests as needed
 4. Run `pnpm build && pnpm test && pnpm check-types` to verify
-5. Open a pull request against `main`
+5. If your change affects published packages, add a changeset: `pnpm changeset`
+6. Open a pull request against `main`
+
+## Changesets
+
+This repo uses [changesets](https://github.com/changesets/changesets) for versioning. If your PR changes anything that affects published packages (`@authloop-ai/sdk` or `@authloop-ai/mcp`), run `pnpm changeset` before opening your PR. Pick the affected packages, choose a semver bump type, and write a short summary. This creates a file in `.changeset/` that gets included in your PR.
 
 ## Commit Messages
 
