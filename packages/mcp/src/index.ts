@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 
+import createDebug from "debug";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Authloop } from "@authloop-ai/sdk";
 import { z } from "zod";
 import { runHandoff } from "./session.js";
+
+const debug = createDebug("authloop:mcp");
 
 // Validate required env
 const apiKey = process.env.AUTHLOOP_API_KEY;
@@ -22,6 +25,8 @@ const server = new McpServer({
   name: "@authloop-ai/mcp",
   version: "0.1.0",
 });
+
+debug("registering authloop_handoff tool");
 
 server.registerTool(
   "authloop_handoff",
@@ -47,6 +52,8 @@ server.registerTool(
     },
   },
   async (args) => {
+    debug("authloop_handoff called: service=%s cdp_url=%s", args.service, args.cdp_url);
+
     try {
       const result = await runHandoff(client, {
         service: args.service,
@@ -59,6 +66,8 @@ server.registerTool(
             }
           : undefined,
       });
+
+      debug("authloop_handoff result: status=%s", result.status);
 
       return {
         content: [
@@ -74,6 +83,7 @@ server.registerTool(
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      debug("authloop_handoff error: %s", message);
       return {
         content: [{ type: "text" as const, text: `Handoff failed: ${message}` }],
         isError: true,
@@ -84,6 +94,7 @@ server.registerTool(
 
 // Graceful shutdown
 function shutdown() {
+  debug("shutting down");
   server.close().then(() => process.exit(0));
 }
 process.on("SIGINT", shutdown);
@@ -92,3 +103,4 @@ process.on("SIGTERM", shutdown);
 // Start
 const transport = new StdioServerTransport();
 await server.connect(transport);
+debug("MCP server started on stdio");

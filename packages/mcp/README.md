@@ -61,6 +61,18 @@ Status is one of: `resolved`, `error`, `timeout`.
 |----------|----------|-------------|
 | `AUTHLOOP_API_KEY` | Yes | API key from [authloop.ai/dashboard](https://authloop.ai/dashboard/api-keys) |
 | `AUTHLOOP_BASE_URL` | No | Override API URL (default: `https://api.authloop.ai`) |
+| `DEBUG` | No | Enable debug logs (e.g. `authloop:*`) |
+
+### Debug namespaces
+
+```bash
+DEBUG=authloop:*           # everything
+DEBUG=authloop:mcp         # MCP server + tool calls
+DEBUG=authloop:session     # session lifecycle (create, poll, resolve)
+DEBUG=authloop:stream      # LiveKit + video frames
+DEBUG=authloop:cdp         # CDP WebSocket commands/events
+DEBUG=authloop:sdk*        # SDK HTTP client
+```
 
 ## Get an API Key
 

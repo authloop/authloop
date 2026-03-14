@@ -4,6 +4,7 @@
  * Receives keystrokes from the human via LiveKit data channel, dispatches to browser via CDP.
  */
 
+import createDebug from "debug";
 import {
   Room,
   RoomEvent,
@@ -16,6 +17,8 @@ import {
 import { decode } from "jpeg-js";
 import { CdpClient } from "./cdp.js";
 
+const debug = createDebug("authloop:stream");
+
 export type StreamResult = "resolved" | "error" | "timeout";
 
 export class BrowserStream {
@@ -24,6 +27,7 @@ export class BrowserStream {
   private videoSource: VideoSource | null = null;
   private resolveWait: ((result: StreamResult) => void) | null = null;
   private stopped = false;
+  private frameCount = 0;
 
   constructor(
     private opts: {
@@ -35,17 +39,22 @@ export class BrowserStream {
 
   async start(): Promise<void> {
     // Connect to CDP
+    debug("connecting to CDP: %s", this.opts.cdpUrl);
     this.cdp = new CdpClient(this.opts.cdpUrl);
     await this.cdp.connect();
+    debug("CDP connected");
 
     // Connect to LiveKit room
+    debug("connecting to LiveKit: %s", this.opts.streamUrl);
     this.room = new Room();
     await this.room.connect(this.opts.streamUrl, this.opts.streamToken);
+    debug("LiveKit connected");
 
     // Set up video source and publish track
     this.videoSource = new VideoSource(1280, 720);
     const track = LocalVideoTrack.createVideoTrack("screen", this.videoSource);
     await this.room.localParticipant!.publishTrack(track, new TrackPublishOptions());
+    debug("video track published");
 
     // Listen for keystrokes from human via data channel
     this.room.on(
@@ -56,10 +65,12 @@ export class BrowserStream {
         const message = JSON.parse(new TextDecoder().decode(payload)) as Record<string, unknown>;
 
         if (topic === "keystrokes") {
+          debug("keystroke received: type=%s key=%s", message.type, message.key);
           this.handleKeystroke(message);
         }
 
         if (message.type === "resolved") {
+          debug("resolution signal received");
           this.resolveWait?.("resolved");
         }
       },
@@ -91,6 +102,7 @@ export class BrowserStream {
       maxHeight: 720,
       everyNthFrame: 1,
     });
+    debug("screencast started");
   }
 
   waitForResolution(): Promise<StreamResult> {
@@ -106,6 +118,7 @@ export class BrowserStream {
   async stop(): Promise<void> {
     if (this.stopped) return;
     this.stopped = true;
+    debug("stopping stream (published %d frames)", this.frameCount);
 
     try {
       await this.cdp?.send("Page.stopScreencast").catch(() => {});
@@ -121,6 +134,7 @@ export class BrowserStream {
 
     await this.room?.disconnect();
     this.room = null;
+    debug("stream stopped");
   }
 
   private publishFrame(base64Data: string, width?: number, height?: number): void {
@@ -140,6 +154,11 @@ export class BrowserStream {
         VideoBufferType.RGBA,
       );
       this.videoSource.captureFrame(frame);
+      this.frameCount++;
+
+      if (this.frameCount % 100 === 0) {
+        debug("published %d frames", this.frameCount);
+      }
     } catch {
       // Skip malformed frames
     }

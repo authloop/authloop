@@ -3,6 +3,10 @@
  * No auto-reconnect — a CDP drop means the session is dead.
  */
 
+import createDebug from "debug";
+
+const debug = createDebug("authloop:cdp");
+
 type PendingCall = {
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
@@ -20,13 +24,19 @@ export class CdpClient {
   constructor(private cdpUrl: string) {}
 
   async connect(): Promise<void> {
+    debug("connecting to %s", this.cdpUrl);
+
     return new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(this.cdpUrl);
       this.ws = ws;
 
-      ws.addEventListener("open", () => resolve());
+      ws.addEventListener("open", () => {
+        debug("connected");
+        resolve();
+      });
       ws.addEventListener("error", (e) => {
         if (!this.closed) {
+          debug("connection error: %s", (e as ErrorEvent).message ?? "unknown");
           reject(new Error(`CDP connection error: ${(e as ErrorEvent).message ?? "unknown"}`));
         }
       });
@@ -46,8 +56,10 @@ export class CdpClient {
           if (pending) {
             this.pending.delete(data.id);
             if (data.error) {
+              debug("command %d error: %s", data.id, data.error.message);
               pending.reject(new Error(`CDP error: ${data.error.message}`));
             } else {
+              debug("command %d ok", data.id);
               pending.resolve(data.result);
             }
           }
@@ -56,6 +68,7 @@ export class CdpClient {
 
         // Event
         if (data.method) {
+          debug("event: %s", data.method);
           const handlers = this.listeners.get(data.method);
           if (handlers) {
             for (const handler of handlers) {
@@ -66,8 +79,8 @@ export class CdpClient {
       });
 
       ws.addEventListener("close", () => {
+        debug("connection closed, rejecting %d pending calls", this.pending.size);
         this.closed = true;
-        // Reject all pending calls
         for (const [, pending] of this.pending) {
           pending.reject(new Error("CDP connection closed"));
         }
@@ -81,6 +94,7 @@ export class CdpClient {
       return Promise.reject(new Error("CDP not connected"));
     }
     const id = this.nextId++;
+    debug("send #%d %s", id, method);
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.ws!.send(JSON.stringify({ id, method, params }));
@@ -97,6 +111,7 @@ export class CdpClient {
   }
 
   close(): void {
+    debug("closing, %d pending calls", this.pending.size);
     this.closed = true;
     for (const [, pending] of this.pending) {
       pending.reject(new Error("CDP client closed"));

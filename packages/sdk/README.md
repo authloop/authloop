@@ -74,6 +74,16 @@ Polls until the session reaches a terminal state. Returns the final `SessionStat
 | `pollInterval` | `number` | `3000` | Polling interval in ms |
 | `timeout` | `number` | `600000` | Max wait time in ms |
 
+## Debug Logging
+
+Uses the [`debug`](https://www.npmjs.com/package/debug) package. Enable with the `DEBUG` environment variable:
+
+```bash
+DEBUG=authloop:sdk*        # all SDK logs
+DEBUG=authloop:sdk:http    # HTTP request/response only
+DEBUG=authloop:*           # all AuthLoop packages (SDK + MCP)
+```
+
 ## Get an API Key
 
 Sign up at [authloop.ai](https://authloop.ai) — 25 free handoffs, no credit card required.
