@@ -83,14 +83,16 @@ Browser streaming (src/stream.ts + src/cdp.ts):
 ## Remaining work
 
 ### Before first publish
-- [ ] Run codegen against production API (`pnpm codegen`) — needs API serving `/openapi.json`
-- [ ] Integration test with real AuthLoop API
+- [x] Run codegen against production API (`pnpm codegen`)
+- [x] Integration tests with real AuthLoop API (8 tests)
+- [x] CI types-drift check (codegen → git diff → fail if stale)
+- [x] CDP auto-discovery (HTTP endpoints resolved via /json/version)
+- [x] Debug logging (`DEBUG=authloop:*`)
 - [ ] Manual E2E test: agent → MCP → API → human resolves → agent continues
 - [ ] Set `NPM_TOKEN` secret in GitHub repo settings
 - [ ] Create first changeset and publish v0.1.0
 
 ### Future
-- [ ] GitHub Action: regenerate types on push to main, fail CI if types drifted
 - [ ] Submit to MCP server registries (Claude Desktop, OpenClaw)
 - [ ] Add timeout handling during streaming (session TTL expiry while stream is active)
 - [ ] Reconnect logic if LiveKit connection drops mid-stream
