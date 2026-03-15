@@ -44,7 +44,11 @@ async function resolveWebSocketUrl(cdpUrl: string): Promise<string> {
         url?: string;
         title?: string;
       }>;
-      const page = targets.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
+      // Filter to page targets with WebSocket URLs
+      const pages = targets.filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
+      // Prefer real web pages over chrome internal pages (about:, chrome:, chrome-extension:)
+      const webPage = pages.find((t) => t.url && /^https?:\/\//.test(t.url));
+      const page = webPage ?? pages[0];
       if (page) {
         debug("discovered page target: %s (%s)", page.title ?? page.url, page.webSocketDebuggerUrl);
         return page.webSocketDebuggerUrl!;

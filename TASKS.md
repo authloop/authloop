@@ -92,7 +92,18 @@ Browser streaming (src/stream.ts + src/cdp.ts):
 - [ ] Set `NPM_TOKEN` secret in GitHub repo settings
 - [ ] Create first changeset and publish v0.1.0
 
+### Done (post-WebSocket migration)
+- [x] Replace LiveKit with WebSocket relay — zero native dependencies
+- [x] CDP page-level target discovery (prefers http:// pages over chrome internals)
+- [x] Full input dispatch: click, dblclick, keydown/keyup/keypress, scroll, paste
+- [x] CDP virtual key codes for special keys (Backspace, arrows, Enter, Tab, F keys)
+- [x] Modifier key support (Ctrl/Cmd+A/C/V, Shift+arrows)
+- [x] Paste via CDP Input.insertText
+- [x] E2EE for keystroke relay — ECDH key exchange (P-256) + AES-256-GCM encryption. Relay cannot read passwords/OTPs.
+- [x] Log audit — no tokens, keys, credentials, or decrypted content logged
+- [x] Frame caching — new viewers immediately see current browser state
+
 ### Future
 - [ ] Submit to MCP server registries (Claude Desktop, OpenClaw)
 - [ ] Add timeout handling during streaming (session TTL expiry while stream is active)
-- [ ] Reconnect logic if LiveKit connection drops mid-stream
+- [ ] Reconnect logic if WebSocket drops mid-stream
