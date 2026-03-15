@@ -1,6 +1,6 @@
 {
   "name": "@authloop-ai/mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "MCP server for AuthLoop — hand off OTP, captcha, and password challenges to humans",
   "type": "module",
   "license": "MIT",
