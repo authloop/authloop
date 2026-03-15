@@ -22,7 +22,7 @@ const KEY_CODES: Record<string, number> = {
   F7: 118, F8: 119, F9: 120, F10: 121, F11: 122, F12: 123,
 };
 
-export type StreamResult = "resolved" | "error" | "timeout";
+export type StreamResult = "resolved" | "cancelled" | "error" | "timeout";
 
 export class BrowserStream {
   private ws: WebSocket | null = null;
@@ -45,6 +45,12 @@ export class BrowserStream {
     // 1. Connect to CDP
     debug("connecting to CDP: %s", this.opts.cdpUrl);
     this.cdp = new CdpClient(this.opts.cdpUrl);
+    this.cdp.onClose(() => {
+      if (!this.stopped) {
+        debug("CDP disconnected unexpectedly");
+        this.resolveWait?.("error");
+      }
+    });
     await this.cdp.connect();
     debug("CDP connected");
 
@@ -208,8 +214,31 @@ export class BrowserStream {
       return;
     }
 
-    debug("received: %s", type);
+    // Control messages from the relay (always plaintext)
+    switch (type) {
+      case "session_expired":
+        debug("session expired");
+        this.resolveWait?.("timeout");
+        return;
+      case "session_cancelled":
+        debug("session cancelled");
+        this.resolveWait?.("cancelled");
+        return;
+      case "viewer_connected":
+        debug("viewer connected");
+        if (this.lastFrameData && this.ws?.readyState === WebSocket.OPEN) {
+          debug("sending cached frame to new viewer");
+          this.ws.send(this.lastFrameData.meta);
+          this.ws.send(this.lastFrameData.jpeg);
+        }
+        return;
+      case "viewer_disconnected":
+        debug("viewer disconnected");
+        return;
+    }
 
+    // Input events — must be decrypted (no plaintext fallback)
+    // These arrive only after E2EE decrypt (recursive handleMessage call)
     switch (type) {
       case "click":
       case "dblclick":
@@ -226,28 +255,28 @@ export class BrowserStream {
       case "paste":
         this.dispatchPaste(msg);
         break;
+      case "back":
+        debug("navigate back");
+        this.cdp?.send("Runtime.evaluate", { expression: "history.back()" }).catch(() => {});
+        break;
+      case "forward":
+        debug("navigate forward");
+        this.cdp?.send("Runtime.evaluate", { expression: "history.forward()" }).catch(() => {});
+        break;
+      case "reload":
+        debug("reload page");
+        this.cdp?.send("Page.reload").catch(() => {});
+        break;
       case "resolved":
+        debug("viewer marked auth as complete");
         this.resolveWait?.("resolved");
         break;
-      case "session_expired":
-        debug("session expired");
-        this.resolveWait?.("timeout");
+      case "cancelled":
+        debug("viewer cancelled the session");
+        this.resolveWait?.("cancelled");
         break;
-      case "session_cancelled":
-        debug("session cancelled");
-        this.resolveWait?.("error");
-        break;
-      case "viewer_connected":
-        debug("viewer connected");
-        // Send the latest frame so the viewer immediately sees the current state
-        if (this.lastFrameData && this.ws?.readyState === WebSocket.OPEN) {
-          debug("sending cached frame to new viewer");
-          this.ws.send(this.lastFrameData.meta);
-          this.ws.send(this.lastFrameData.jpeg);
-        }
-        break;
-      case "viewer_disconnected":
-        debug("viewer disconnected");
+      default:
+        debug("unknown message type: %s (dropped)", type);
         break;
     }
   }

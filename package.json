@@ -6,6 +6,7 @@
     "dev": "turbo run dev",
     "check-types": "turbo run check-types",
     "codegen": "turbo run codegen",
+    "codegen:local": "turbo run codegen:local",
     "test": "turbo run test",
     "changeset": "changeset",
     "version-packages": "changeset version",

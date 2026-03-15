@@ -61,10 +61,12 @@ export async function runHandoff(
     }
 
     if (status.status !== "ACTIVE") {
-      const mapped: StreamResult =
-        status.status === "RESOLVED" ? "resolved" :
-        status.status === "TIMEOUT" ? "timeout" :
-        "error";
+      const statusMap: Record<string, StreamResult> = {
+        RESOLVED: "resolved",
+        TIMEOUT: "timeout",
+        CANCELLED: "cancelled",
+      };
+      const mapped: StreamResult = statusMap[status.status] ?? "error";
       debug("session terminated during polling: %s → %s", status.status, mapped);
       return { sessionUrl: session.sessionUrl, status: mapped };
     }
@@ -83,10 +85,13 @@ export async function runHandoff(
     const result = await stream.waitForResolution();
     debug("stream result: %s", result);
 
-    // 5. On resolved, tell the API
+    // 5. Tell the API the outcome
     if (result === "resolved") {
       debug("resolving session %s", session.sessionId);
       await client.resolveSession(session.sessionId).catch(() => {});
+    } else if (result === "cancelled") {
+      debug("cancelling session %s (viewer cancelled)", session.sessionId);
+      await client.cancelSession(session.sessionId).catch(() => {});
     }
 
     return { sessionUrl: session.sessionUrl, status: result };

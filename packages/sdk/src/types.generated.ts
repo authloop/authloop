@@ -1,4 +1,4 @@
-// Auto-generated from https://api.authloop.ai/openapi.json
+// Auto-generated from http://localhost:8787/openapi.json
 // Do not edit manually
 
 export interface paths {
@@ -82,10 +82,10 @@ export interface components {
             hint?: string;
         };
         /**
-         * @description PENDING: waiting for human. ACTIVE: human connected. RESOLVED: auth completed. TIMEOUT: session expired. ERROR: unexpected failure.
+         * @description PENDING: waiting for human. ACTIVE: human connected. RESOLVED: auth completed. TIMEOUT: session expired. ERROR: unexpected failure. CANCELLED: user cancelled.
          * @enum {string}
          */
-        SessionStatus: "PENDING" | "ACTIVE" | "RESOLVED" | "TIMEOUT" | "ERROR";
+        SessionStatus: "PENDING" | "ACTIVE" | "RESOLVED" | "TIMEOUT" | "ERROR" | "CANCELLED";
         Error: {
             error: string;
         };

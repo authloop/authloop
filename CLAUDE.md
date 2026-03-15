@@ -18,11 +18,14 @@ This is a **public** repo. The AuthLoop API server and web app live in a separat
 
 1. Agent hits an auth wall (OTP, captcha, password prompt)
 2. Agent calls `authloop.handoff()` (SDK) or uses `authloop_handoff` tool (MCP)
-3. AuthLoop API creates a session, returns a `session_url` + `stream_token`
+3. AuthLoop API creates a session, returns `session_url` + `stream_url` + `stream_token`
 4. Agent sends `session_url` to the human (via Telegram, Slack, WhatsApp, etc.)
-5. Agent publishes browser frames to the session using the stream token
-6. Human opens the URL, sees the live browser tab, types the OTP/password
-7. Agent calls `resolveSession()` and continues
+5. MCP connects to the stream relay via WebSocket
+6. MCP captures browser frames via CDP screencast and streams them as JPEG over WebSocket
+7. Human opens the URL, sees the live browser tab, types the OTP/password
+8. Keystrokes are E2EE encrypted (ECDH + AES-256-GCM) — relay cannot read them
+9. MCP dispatches keystrokes to the browser via CDP
+10. Human clicks "Resolve" → MCP calls `resolveSession()` → agent continues
 
 ## Packages
 
@@ -66,10 +69,13 @@ MCP server that exposes `authloop_handoff` as a tool. One line in `openclaw.json
 
 The MCP server handles:
 - Session creation via `authloop_handoff` tool
-- Publishing CDP screencast frames to the session stream
-- Receiving keystrokes from the human and dispatching to the browser via CDP
+- CDP screencast capture and JPEG frame streaming over WebSocket
+- E2EE key exchange (ECDH P-256) and decryption (AES-256-GCM) of keystrokes
+- Input dispatch to browser via CDP (click, type, scroll, paste)
 - Clean disconnect protocol (resolve → disconnect)
 - Error handling on unexpected disconnects
+
+Zero native dependencies — works on all platforms (no LiveKit/WebRTC binary).
 
 ## API Contract
 
@@ -88,7 +94,7 @@ The SDK and MCP server communicate with the AuthLoop API at `https://api.authloo
 
 ```
 Request:  { service, cdp_url, ttl?, context?: { url?, blocker_type?, hint? } }
-Response: { session_id, session_url, stream_token, expires_at }
+Response: { session_id, session_url, stream_url, stream_token, expires_at }
 ```
 
 ### GET /session/:id

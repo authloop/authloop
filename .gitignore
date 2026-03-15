@@ -14,3 +14,7 @@ dist
 .DS_Store
 *.pem
 npm-debug.log*
+
+# Internal docs (moved to private repo)
+docs/PLATFORM_INTEGRATION.md
+TASKS.md

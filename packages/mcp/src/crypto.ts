@@ -1,12 +1,12 @@
 /**
  * End-to-end encryption for the keystroke relay.
  *
- * Uses X25519 Diffie-Hellman key exchange + AES-256-GCM.
- * The relay (Cloudflare DO) only sees ciphertext — it cannot read passwords or OTPs.
+ * Uses ECDH (P-256) key exchange + AES-256-GCM.
+ * The relay only sees ciphertext — it cannot read passwords or OTPs.
  *
  * Flow:
- *   1. MCP generates X25519 keypair, sends public key to viewer via relay
- *   2. Viewer generates X25519 keypair, sends public key to MCP via relay
+ *   1. MCP generates ECDH P-256 keypair, sends public key to viewer via relay
+ *   2. Viewer generates ECDH P-256 keypair, sends public key to MCP via relay
  *   3. Both sides derive the same shared secret using ECDH
  *   4. Viewer encrypts input events with AES-256-GCM before sending
  *   5. MCP decrypts input events after receiving

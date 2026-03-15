@@ -81,9 +81,15 @@ export class CdpClient {
   private nextId = 1;
   private pending = new Map<number, PendingCall>();
   private listeners = new Map<string, Set<EventHandler>>();
+  private closeHandlers: Array<() => void> = [];
   private closed = false;
 
   constructor(private cdpUrl: string) {}
+
+  /** Register a callback for when the CDP connection closes */
+  onClose(handler: () => void): void {
+    this.closeHandlers.push(handler);
+  }
 
   async connect(): Promise<void> {
     const wsUrl = await resolveWebSocketUrl(this.cdpUrl);
@@ -148,6 +154,9 @@ export class CdpClient {
           pending.reject(new Error("CDP connection closed"));
         }
         this.pending.clear();
+        for (const handler of this.closeHandlers) {
+          handler();
+        }
       });
     });
   }

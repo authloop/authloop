@@ -26,6 +26,7 @@ const wss = new WebSocketServer({ server: http });
 
 let agent = null;
 let viewer = null;
+let agentPubKey = null; // cached for late-joining viewers
 
 wss.on("connection", (ws, req) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
@@ -36,35 +37,41 @@ wss.on("connection", (ws, req) => {
 
   if (role === "agent") {
     agent = ws;
-    // Notify viewer that agent connected
     if (viewer?.readyState === WebSocket.OPEN) {
       viewer.send(JSON.stringify({ type: "agent_connected" }));
-    }
-    // Notify agent if viewer is already connected
-    if (viewer?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "viewer_connected" }));
     }
   } else {
     viewer = ws;
-    // Notify agent that viewer connected
     if (agent?.readyState === WebSocket.OPEN) {
       agent.send(JSON.stringify({ type: "viewer_connected" }));
-    }
-    if (agent?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "agent_connected" }));
+    }
+    // Send cached agent pubkey so viewer can complete E2EE key exchange
+    if (agentPubKey) {
+      console.log("[RELAY] sending cached agent pubkey to viewer");
+      ws.send(agentPubKey);
     }
   }
 
   ws.on("message", (data, isBinary) => {
+    // Cache agent's pubkey for late-joining viewers
+    if (!isBinary && ws === agent) {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === "pubkey") {
+          agentPubKey = data.toString();
+          console.log("[RELAY] cached agent pubkey");
+        }
+      } catch {}
+    }
+
     const target = ws === agent ? viewer : agent;
     if (target?.readyState === WebSocket.OPEN) {
       target.send(data, { binary: isBinary });
     }
     if (!isBinary && ws !== agent) {
       console.log(`[RELAY] viewer → agent: ${data.toString().slice(0, 100)}`);
-    }
-    if (isBinary && ws === agent) {
-      // Don't log every frame, just count
     }
   });
 
@@ -111,7 +118,11 @@ const VIEWER_HTML = `<!DOCTYPE html>
   <div id="status">Connecting...</div>
   <canvas id="screen" width="1280" height="720" tabindex="0"></canvas>
   <div id="controls">
-    <button id="resolve-btn">Resolve (auth complete)</button>
+    <button id="back-btn">&#9664; Back</button>
+    <button id="forward-btn">Forward &#9654;</button>
+    <button id="reload-btn">&#8635; Reload</button>
+    <button id="resolve-btn">Done (auth complete)</button>
+    <button id="cancel-btn" style="background:#ef4444;color:white;border:none;border-radius:4px;">Cancel</button>
   </div>
   <div id="log"></div>
   <script>
@@ -156,7 +167,7 @@ const VIEWER_HTML = `<!DOCTYPE html>
     }
 
     async function encryptAndSend(msg) {
-      if (!e2eeReady) { send(msg); return; } // fallback to plaintext if E2EE not ready
+      if (!e2eeReady) { addLog('E2EE not ready — input blocked'); return; }
       const plaintext = new TextEncoder().encode(JSON.stringify(msg));
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, e2eeKey, plaintext);
@@ -176,7 +187,7 @@ const VIEWER_HTML = `<!DOCTYPE html>
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => { status.textContent = 'Connected — waiting for agent...'; addLog('Connected to relay'); };
-    ws.onclose = () => { status.textContent = 'Disconnected'; addLog('Disconnected'); };
+    ws.onclose = () => { endSession('Disconnected'); addLog('Disconnected'); };
 
     ws.onmessage = (e) => {
       if (e.data instanceof ArrayBuffer) {
@@ -206,6 +217,9 @@ const VIEWER_HTML = `<!DOCTYPE html>
         } else {
           addLog('Server: ' + msg.type);
           if (msg.type === 'agent_connected') status.textContent = 'Agent connected — streaming will start';
+          if (msg.type === 'agent_disconnected') { endSession('Session ended'); ws.close(); }
+          if (msg.type === 'session_expired') { endSession('Session expired'); ws.close(); }
+          if (msg.type === 'session_cancelled') { endSession('Session cancelled'); ws.close(); }
         }
       }
     };
@@ -235,19 +249,19 @@ const VIEWER_HTML = `<!DOCTYPE html>
     // Mouse events
     canvas.addEventListener('click', (e) => {
       const { x, y } = mapCoords(e.clientX, e.clientY);
-      send({ type: 'click', x, y, button: 'left' });
-      addLog('Click: ' + x + ', ' + y);
+      encryptAndSend({ type: 'click', x, y, button: 'left' });
+      addLog('Click: ' + x + ', ' + y + (e2eeReady ? ' [encrypted]' : ' [blocked]'));
     });
 
     canvas.addEventListener('dblclick', (e) => {
       const { x, y } = mapCoords(e.clientX, e.clientY);
-      send({ type: 'dblclick', x, y });
+      encryptAndSend({ type: 'dblclick', x, y });
     });
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const { x, y } = mapCoords(e.clientX, e.clientY);
-      send({ type: 'scroll', x, y, deltaX: e.deltaX, deltaY: e.deltaY });
+      encryptAndSend({ type: 'scroll', x, y, deltaX: e.deltaX, deltaY: e.deltaY });
     }, { passive: false });
 
     // Keyboard events — canvas must be focused
@@ -279,10 +293,47 @@ const VIEWER_HTML = `<!DOCTYPE html>
     canvas.addEventListener('mousedown', () => canvas.focus());
 
     // Resolve button
+    document.getElementById('back-btn').addEventListener('click', () => {
+      encryptAndSend({ type: 'back' });
+      addLog('Navigate: back');
+    });
+
+    document.getElementById('forward-btn').addEventListener('click', () => {
+      encryptAndSend({ type: 'forward' });
+      addLog('Navigate: forward');
+    });
+
+    document.getElementById('reload-btn').addEventListener('click', () => {
+      encryptAndSend({ type: 'reload' });
+      addLog('Navigate: reload');
+    });
+
+    function endSession(label) {
+      status.textContent = label;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#888';
+      ctx.font = '24px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, canvas.width / 2, canvas.height / 2);
+      document.getElementById('resolve-btn').disabled = true;
+      document.getElementById('cancel-btn').disabled = true;
+      document.getElementById('back-btn').disabled = true;
+      document.getElementById('forward-btn').disabled = true;
+      document.getElementById('reload-btn').disabled = true;
+    }
+
     document.getElementById('resolve-btn').addEventListener('click', () => {
-      send({ type: 'resolved' });
-      status.textContent = 'Resolved — session complete';
-      addLog('Sent: resolved');
+      encryptAndSend({ type: 'resolved' });
+      endSession('Done — auth complete');
+      addLog('Sent: resolved' + (e2eeReady ? ' [encrypted]' : ' [blocked]'));
+    });
+
+    document.getElementById('cancel-btn').addEventListener('click', () => {
+      encryptAndSend({ type: 'cancelled' });
+      endSession('Cancelled');
+      addLog('Sent: cancelled' + (e2eeReady ? ' [encrypted]' : ' [blocked]'));
     });
   </script>
 </body>

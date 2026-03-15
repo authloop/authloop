@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { runHandoff, _resetActiveSession } from "./session.js";
 
-// Mock the stream module — BrowserStream is heavy (LiveKit + CDP)
+// Mock the stream module — BrowserStream requires WebSocket + CDP connections
 vi.mock("./stream.js", () => {
   const BrowserStream = vi.fn();
   BrowserStream.prototype.start = vi.fn().mockResolvedValue(undefined);
@@ -21,7 +21,7 @@ function createMockClient(opts?: {
       sessionId: "sess_123",
       sessionUrl: "https://app.authloop.ai/s/sess_123",
       streamToken: "tok_abc",
-      streamUrl: "wss://lk.authloop.ai",
+      streamUrl: "wss://stream.example.com/test",
       expiresAt: "2026-03-14T12:00:00Z",
     }),
     getSession: vi.fn().mockImplementation(() => {

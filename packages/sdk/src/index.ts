@@ -29,7 +29,7 @@ export interface HandoffResult {
 
 export interface SessionStatus {
   sessionId: string;
-  status: "PENDING" | "ACTIVE" | "RESOLVED" | "TIMEOUT" | "ERROR";
+  status: "PENDING" | "ACTIVE" | "RESOLVED" | "TIMEOUT" | "ERROR" | "CANCELLED";
   service: string;
   context?: {
     url?: string;
@@ -181,7 +181,7 @@ export class Authloop {
     while (Date.now() - start < timeout) {
       const status = await this.getSession(sessionId);
 
-      if (status.status === "RESOLVED" || status.status === "ERROR" || status.status === "TIMEOUT") {
+      if (status.status === "RESOLVED" || status.status === "ERROR" || status.status === "TIMEOUT" || status.status === "CANCELLED") {
         debug("waitForResolution: terminal status=%s after %dms", status.status, Date.now() - start);
         return status;
       }
