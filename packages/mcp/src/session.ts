@@ -53,7 +53,7 @@ export async function runHandoff(
       context: options.context,
     });
     debug("session created: id=%s url=%s", session.sessionId, session.sessionUrl);
-    perf("[perf:session] session created: %dms", Date.now() - handoffStart);
+    perf("[perf:session] session created → WebSocket connect: %dms", Date.now() - handoffStart);
 
     // 2. Connect WebSocket immediately (no polling)
     const wsUrl = `${session.streamUrl}?token=${encodeURIComponent(session.streamToken)}&role=agent`;
@@ -77,7 +77,7 @@ export async function runHandoff(
       });
     });
 
-    perf("[perf:session] WebSocket connect: %dms", Date.now() - wsConnectStart);
+    perf("[perf:stream] WebSocket connect: %dms", Date.now() - wsConnectStart);
     debug("relay connected, waiting for viewer...");
 
     // 3. Wait for viewer_connected or terminal event (no polling!)
@@ -107,7 +107,8 @@ export async function runHandoff(
       });
     });
 
-    perf("[perf:session] wait for viewer: %dms", Date.now() - waitStart);
+    perf("[perf:session] total wait duration (PENDING → %s): %dms (via WebSocket push, no polling)", waitResult === "resolved" ? "ACTIVE" : waitResult, Date.now() - waitStart);
+    perf("[perf:session] poll count: 0 (WebSocket push)");
 
     if (waitResult !== "resolved") {
       debug("session terminated before viewer joined: %s", waitResult);

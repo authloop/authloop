@@ -3,16 +3,14 @@
  *
  * Prerequisites:
  *   1. Chrome with CDP:     google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/authloop-test
- *   2. Local API server:    running on localhost:8787
- *   3. Local web app:       running on localhost:3000
- *   4. Run this:            AUTHLOOP_API_KEY=al_live_... node scripts/test-e2e-full.mjs
+ *   2. Run this:            AUTHLOOP_API_KEY=al_live_... node scripts/test-e2e-full.mjs
+ *   3. Open the session URL printed below in your browser
  *
  * Flow:
  *   - Creates a real session via the API
- *   - Prints the session URL — open it in your browser (localhost:3000)
- *   - Connects to the real relay WebSocket
- *   - Streams CDP screencast frames
- *   - E2EE key exchange with the real viewer
+ *   - Connects to the relay WebSocket immediately (no polling)
+ *   - Waits for viewer_connected (you open the URL)
+ *   - Starts CDP screencast + E2EE key exchange
  *   - Human interacts, clicks Done or Cancel
  *   - Calls resolve/cancel on the API
  */
@@ -33,9 +31,11 @@ const client = new Authloop({ apiKey, baseUrl });
 
 // Graceful shutdown
 let stream = null;
+let ws = null;
 async function cleanup(result) {
   console.log("\nCleaning up...");
   await stream?.stop();
+  if (!stream && ws) ws.close();
   console.log("Done. Result:", result ?? "interrupted");
   process.exit(0);
 }
@@ -65,46 +65,53 @@ console.log("║  (or http://localhost:3000/session/" + session.sessionId + ")")
 console.log("╚══════════════════════════════════════════════════════╝");
 console.log("");
 
-// 2. Poll until ACTIVE (retry on transient errors)
-console.log("Polling for viewer to connect...");
-let status;
-while (true) {
-  try {
-    status = await client.getSession(session.sessionId);
-    if (status.status !== "PENDING") break;
-  } catch (err) {
-    // Retry on 5xx, throw on 4xx
-    if (err.status && err.status < 500) throw err;
-    process.stdout.write("!");
-  }
-  process.stdout.write(".");
-  await new Promise((r) => setTimeout(r, 3000));
-}
-console.log("");
+// 2. Connect WebSocket immediately (no polling)
+console.log("Connecting to relay...");
+const wsUrl = `${session.streamUrl}?token=${encodeURIComponent(session.streamToken)}&role=agent`;
 
-if (status.status !== "ACTIVE") {
-  console.log("Session terminated during polling:", status.status);
+ws = await new Promise((resolve, reject) => {
+  const socket = new WebSocket(wsUrl);
+  const timeout = setTimeout(() => { socket.close(); reject(new Error("WebSocket timeout")); }, 15000);
+  socket.addEventListener("open", () => { clearTimeout(timeout); resolve(socket); });
+  socket.addEventListener("error", (e) => { clearTimeout(timeout); reject(e); });
+});
+
+console.log("Relay connected. Waiting for viewer...\n");
+
+// 3. Wait for viewer_connected or terminal event
+const waitResult = await new Promise((resolve) => {
+  ws.addEventListener("message", (event) => {
+    if (typeof event.data !== "string") return;
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === "viewer_connected") resolve("active");
+      if (msg.type === "session_expired") resolve("timeout");
+      if (msg.type === "session_cancelled") resolve("cancelled");
+    } catch {}
+  });
+  ws.addEventListener("close", () => resolve("error"));
+});
+
+if (waitResult !== "active") {
+  console.log("Session terminated before viewer joined:", waitResult);
+  ws.close();
   process.exit(1);
 }
 
 console.log("Viewer connected! Starting stream...");
 
-// 3. Start stream
-stream = new BrowserStream({
-  streamUrl: session.streamUrl,
-  streamToken: session.streamToken,
-  cdpUrl,
-});
+// 4. Start stream — reuse the already-connected WebSocket
+stream = new BrowserStream({ ws, cdpUrl });
 
 await stream.start();
 console.log("Stream started — browser is now live in the viewer.");
 console.log("Interact with the browser, then click Done or Cancel.\n");
 
-// 4. Wait for resolution
+// 5. Wait for resolution
 const result = await stream.waitForResolution();
 console.log("Stream result:", result);
 
-// 5. Tell the API
+// 6. Tell the API
 if (result === "resolved") {
   console.log("Resolving session...");
   await client.resolveSession(session.sessionId).catch(() => {});

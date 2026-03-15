@@ -131,8 +131,9 @@ export class BrowserStream {
 
         if (!this.firstFrameSent) {
           this.firstFrameSent = true;
-          perf("[perf:stream] CDP → first screencast frame: %dms", Date.now() - this.startTime);
-          perf("[perf:stream] first frame → first relay send: 0ms");
+          const frameTime = Date.now();
+          perf("[perf:stream] CDP → first screencast frame: %dms", frameTime - this.startTime);
+          perf("[perf:stream] first frame → first relay send: %dms", Date.now() - frameTime);
         }
 
         if (this.frameCount % 100 === 0) {
