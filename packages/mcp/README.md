@@ -70,12 +70,14 @@ Agent                    MCP Server                  Relay                    Hu
   │─────────────────────────→│                         │                       │
   │                          │ POST /session            │                       │
   │                          │────────────────────────→ │                       │
-  │                          │ polls until ACTIVE       │                       │
+  │                          │ connect WSS (instant)    │                       │
   │                          │────────────────────────→ │                       │
+  │                          │                          │  viewer_connected     │
+  │                          │ ←────────────────────── │ ←─────────────────    │
   │                          │                          │                       │
   │                          │ CDP screencast ──→ JPEG frames over WSS ──→    │
   │                          │                          │                       │
-  │                          │           E2EE keystrokes over WSS ←───────    │
+  │                          │     E2EE encrypted input over WSS ←─────────   │
   │                          │ CDP dispatch ←────       │                       │
   │                          │                          │                       │
   │                          │        { "type": "resolved" } ←────────────    │
@@ -87,11 +89,12 @@ Agent                    MCP Server                  Relay                    Hu
 1. Agent calls `authloop_handoff` when it hits an auth wall
 2. MCP server creates a session via the AuthLoop API
 3. Agent sends the `session_url` to the human (Telegram, Slack, etc.)
-4. MCP server captures the browser tab via CDP screencast
-5. JPEG frames stream to the human's browser over WebSocket
-6. Human sees the live browser, clicks and types
-7. Keystrokes are end-to-end encrypted (E2EE) and dispatched to the browser via CDP
-8. Human clicks "Done" to resolve or "Cancel" to abort — agent continues with the result
+4. MCP connects to the relay WebSocket immediately (no polling)
+5. Human opens the URL — relay notifies MCP instantly via `viewer_connected`
+6. MCP starts CDP screencast, JPEG frames stream to the human's browser
+7. Human sees the live browser, clicks and types
+8. All input is end-to-end encrypted (E2EE) and dispatched to the browser via CDP
+9. Human clicks "Done" to resolve or "Cancel" to abort — agent continues with the result
 
 ## Security
 
@@ -148,7 +151,7 @@ Debug logs (`DEBUG=authloop:*`) never contain:
 ```bash
 DEBUG=authloop:*           # everything
 DEBUG=authloop:mcp         # MCP server + tool calls
-DEBUG=authloop:session     # session lifecycle (create, poll, resolve)
+DEBUG=authloop:session     # session lifecycle (create, connect, resolve)
 DEBUG=authloop:stream      # WebSocket frames + input events
 DEBUG=authloop:cdp         # CDP WebSocket commands/events
 DEBUG=authloop:crypto      # E2EE key exchange
