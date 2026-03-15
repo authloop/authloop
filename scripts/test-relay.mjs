@@ -103,14 +103,17 @@ const VIEWER_HTML = `<!DOCTYPE html>
 <head>
   <title>AuthLoop Test Viewer</title>
   <style>
-    body { margin: 0; background: #111; display: flex; flex-direction: column; align-items: center; font-family: system-ui; color: #eee; }
-    h3 { margin: 12px 0 8px; }
-    #status { color: #888; margin-bottom: 8px; font-size: 14px; }
-    #screen { border: 2px solid #333; cursor: crosshair; background: #000; }
-    #controls { margin-top: 12px; }
-    button { padding: 8px 20px; font-size: 16px; cursor: pointer; margin: 0 4px; }
-    #resolve-btn { background: #22c55e; color: white; border: none; border-radius: 4px; }
-    #log { margin-top: 12px; font-size: 12px; color: #666; max-height: 150px; overflow-y: auto; width: 1280px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: system-ui; color: #eee; padding: 12px; }
+    h3 { margin: 0 0 8px; font-size: 16px; }
+    #status { color: #888; margin-bottom: 8px; font-size: 13px; }
+    #screen { border: 2px solid #333; cursor: crosshair; background: #000; max-width: 100%; height: auto; display: block; }
+    #controls { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+    button { padding: 8px 16px; font-size: 14px; cursor: pointer; border: 1px solid #444; background: #222; color: #eee; border-radius: 4px; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    #resolve-btn { background: #22c55e; color: white; border: none; }
+    #cancel-btn { background: #ef4444; color: white; border: none; }
+    #log { margin-top: 10px; font-size: 11px; color: #666; max-height: 120px; overflow-y: auto; width: 100%; max-width: 1280px; }
   </style>
 </head>
 <body>
