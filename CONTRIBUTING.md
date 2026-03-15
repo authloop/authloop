@@ -49,9 +49,55 @@ This repo uses [changesets](https://github.com/changesets/changesets) for versio
 
 ## Tests
 
-- SDK tests: `pnpm --filter @authloop-ai/sdk test`
-- MCP tests: `pnpm --filter @authloop-ai/mcp test`
-- All tests: `pnpm test`
+### Unit tests
+
+```bash
+pnpm test                                    # all packages
+pnpm --filter @authloop-ai/sdk test          # SDK only
+pnpm --filter @authloop-ai/mcp test          # MCP only
+```
+
+### SDK integration tests (needs API key)
+
+```bash
+AUTHLOOP_API_KEY=al_live_... pnpm --filter @authloop-ai/sdk test:integration
+
+# Against local API server:
+AUTHLOOP_API_KEY=al_live_... AUTHLOOP_BASE_URL=http://localhost:8787 pnpm --filter @authloop-ai/sdk test:integration
+```
+
+### MCP E2E test (needs browser + local relay)
+
+This tests the full flow: CDP screencast → WebSocket relay → viewer interaction → resolve.
+
+**Terminal 1** — Launch a browser with CDP:
+```bash
+# Chrome
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222 --user-data-dir=/tmp/authloop-test
+
+# Brave
+/Applications/Brave\ Browser.app/Contents/MacOS/Brave\ Browser \
+  --remote-debugging-port=9222 --user-data-dir=/tmp/authloop-test
+```
+Skip any sign-in prompts. Navigate to a page with a login form (e.g. `https://github.com/login`).
+
+**Terminal 2** — Start the local WebSocket relay:
+```bash
+node scripts/test-relay.mjs
+```
+
+**Terminal 3** — Run the E2E test:
+```bash
+DEBUG=authloop:* node scripts/test-e2e.mjs
+```
+
+**Browser** — Open the viewer:
+```
+http://localhost:8888
+```
+
+You should see the remote browser streaming live. Click on input fields, type, scroll. Click "Done" to resolve or "Cancel" to abort. All input is E2EE encrypted — check the log for `[encrypted]` tags.
 
 Tests use [vitest](https://vitest.dev/). Add tests for new functionality and ensure existing tests pass.
 

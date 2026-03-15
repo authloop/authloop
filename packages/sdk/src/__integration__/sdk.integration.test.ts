@@ -125,6 +125,30 @@ describe.skipIf(!apiKey)("SDK integration tests (live API)", () => {
     await client.cancelSession(session.sessionId);
   });
 
+  it("returns CANCELLED status after cancelling a session", async () => {
+    const session = await client.handoff({
+      service: "Integration Test - Cancelled Status",
+      cdpUrl: "ws://localhost:9222",
+    });
+
+    await client.cancelSession(session.sessionId);
+
+    const status = await client.getSession(session.sessionId);
+    expect(status.status).toBe("CANCELLED");
+  });
+
+  it("waitForResolution returns immediately on CANCELLED", async () => {
+    const session = await client.handoff({
+      service: "Integration Test - Wait Cancelled",
+      cdpUrl: "ws://localhost:9222",
+    });
+
+    await client.cancelSession(session.sessionId);
+
+    const status = await client.waitForResolution(session.sessionId, { pollInterval: 100 });
+    expect(status.status).toBe("CANCELLED");
+  });
+
   it("rejects with 401 on bad API key", async () => {
     const badClient = new Authloop({
       apiKey: "al_live_invalid_key",

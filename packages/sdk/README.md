@@ -47,7 +47,7 @@ Creates a handoff session. Returns `{ sessionId, sessionUrl, streamToken, stream
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `service` | `string` | Yes | Name of the service (e.g. `'HDFC NetBanking'`) |
-| `cdpUrl` | `string` | Yes | Chrome DevTools Protocol WebSocket URL |
+| `cdpUrl` | `string` | Yes | CDP endpoint — HTTP or WebSocket URL. HTTP endpoints are auto-resolved via `/json`. |
 | `ttl` | `number` | No | Session timeout in seconds |
 | `context.url` | `string` | No | Current page URL |
 | `context.blockerType` | `string` | No | `'otp'`, `'password'`, `'captcha'`, `'security_question'`, `'document_upload'`, `'other'` |
@@ -55,7 +55,7 @@ Creates a handoff session. Returns `{ sessionId, sessionUrl, streamToken, stream
 
 ### `authloop.getSession(sessionId)`
 
-Returns current session status: `PENDING`, `ACTIVE`, `RESOLVED`, `TIMEOUT`, or `ERROR`.
+Returns current session status: `PENDING`, `ACTIVE`, `RESOLVED`, `TIMEOUT`, `ERROR`, or `CANCELLED`.
 
 ### `authloop.resolveSession(sessionId)`
 
@@ -67,7 +67,7 @@ Cancels a session.
 
 ### `authloop.waitForResolution(sessionId, options?)`
 
-Polls until the session reaches a terminal state. Returns the final `SessionStatus`.
+Polls until the session reaches a terminal state (`RESOLVED`, `TIMEOUT`, `ERROR`, or `CANCELLED`). Returns the final `SessionStatus`.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|

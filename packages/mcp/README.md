@@ -59,7 +59,7 @@ Hand off a login or auth challenge to a human who can resolve it remotely.
 }
 ```
 
-Status is one of: `resolved`, `error`, `timeout`.
+Status is one of: `resolved`, `cancelled`, `error`, `timeout`.
 
 ## How It Works
 
@@ -91,20 +91,20 @@ Agent                    MCP Server                  Relay                    Hu
 5. JPEG frames stream to the human's browser over WebSocket
 6. Human sees the live browser, clicks and types
 7. Keystrokes are end-to-end encrypted (E2EE) and dispatched to the browser via CDP
-8. Human clicks "Resolve" — session completes, agent continues
+8. Human clicks "Done" to resolve or "Cancel" to abort — agent continues with the result
 
 ## Security
 
 ### End-to-End Encryption (E2EE)
 
-All keystrokes and paste events are end-to-end encrypted between the human's browser and the MCP server. The relay server **cannot read passwords or OTPs**.
+All user input is end-to-end encrypted between the human's browser and the MCP server. The relay server **cannot read what the human types or clicks**.
 
 - **Key exchange**: ECDH on P-256 curve
 - **Encryption**: AES-256-GCM (12-byte IV, 16-byte auth tag)
-- **What's encrypted**: keypress, keydown, keyup, paste (sensitive input)
-- **What's NOT encrypted**: click coordinates, scroll events, frames (visible page content)
+- **What's encrypted**: all user input — keystrokes, clicks, scroll, paste, navigation, resolve/cancel
+- **What's NOT encrypted**: frames (visible page content — screenshots only)
 
-The key exchange happens automatically when the viewer connects — no configuration needed.
+The key exchange happens automatically when the viewer connects — no configuration needed. No input is accepted until E2EE is established.
 
 ### Transport Security
 
@@ -132,6 +132,8 @@ Debug logs (`DEBUG=authloop:*`) never contain:
 | Modifier combos | Ctrl/Cmd+A, Ctrl/Cmd+C, Shift+arrows, etc. |
 | Paste | CDP `Input.insertText` — works on mobile too |
 | Scroll | Mouse wheel via CDP |
+| Back / Forward | Browser history navigation via CDP |
+| Reload | Page reload via CDP |
 
 ## Environment Variables
 

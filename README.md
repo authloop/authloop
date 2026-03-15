@@ -96,8 +96,8 @@ All keystrokes (passwords, OTPs) are end-to-end encrypted between the human's br
 
 - **Key exchange**: ECDH (P-256) — both sides generate keypairs, exchange public keys, derive a shared secret. The relay only sees public keys and cannot compute the secret.
 - **Encryption**: AES-256-GCM — each keystroke is individually encrypted with a random IV and authenticated with a GCM tag.
-- **What's encrypted**: all keyboard input and paste events
-- **What's NOT encrypted**: click coordinates, scroll events, screenshots (visible page content)
+- **What's encrypted**: all user input — keystrokes, clicks, scroll, paste, navigation, resolve/cancel
+- **What's NOT encrypted**: screenshots (visible page content only)
 
 ### Transport & Session Security
 
