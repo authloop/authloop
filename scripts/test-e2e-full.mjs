@@ -65,13 +65,20 @@ console.log("║  (or http://localhost:3000/session/" + session.sessionId + ")")
 console.log("╚══════════════════════════════════════════════════════╝");
 console.log("");
 
-// 2. Poll until ACTIVE
+// 2. Poll until ACTIVE (retry on transient errors)
 console.log("Polling for viewer to connect...");
-let status = await client.getSession(session.sessionId);
-while (status.status === "PENDING") {
+let status;
+while (true) {
+  try {
+    status = await client.getSession(session.sessionId);
+    if (status.status !== "PENDING") break;
+  } catch (err) {
+    // Retry on 5xx, throw on 4xx
+    if (err.status && err.status < 500) throw err;
+    process.stdout.write("!");
+  }
   process.stdout.write(".");
   await new Promise((r) => setTimeout(r, 3000));
-  status = await client.getSession(session.sessionId);
 }
 console.log("");
 

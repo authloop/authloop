@@ -124,6 +124,9 @@ const VIEWER_HTML = `<!DOCTYPE html>
     <button id="back-btn">&#9664; Back</button>
     <button id="forward-btn">Forward &#9654;</button>
     <button id="reload-btn">&#8635; Reload</button>
+    <button id="zoom-in-btn">+ Zoom</button>
+    <button id="zoom-out-btn">- Zoom</button>
+    <button id="zoom-reset-btn">Reset</button>
     <button id="resolve-btn">Done (auth complete)</button>
     <button id="cancel-btn" style="background:#ef4444;color:white;border:none;border-radius:4px;">Cancel</button>
   </div>
@@ -232,18 +235,16 @@ const VIEWER_HTML = `<!DOCTYPE html>
     // Map canvas pixel coordinates to CDP viewport coordinates
     function mapCoords(clientX, clientY) {
       const rect = canvas.getBoundingClientRect();
-      // Position relative to canvas element (0..rect.width, 0..rect.height)
+      // getBoundingClientRect already accounts for CSS transform (zoom)
       const canvasX = clientX - rect.left;
       const canvasY = clientY - rect.top;
 
       if (frameMeta && frameMeta.deviceWidth && frameMeta.deviceHeight) {
-        // Map from displayed canvas size to actual device viewport
         const x = Math.round((canvasX / rect.width) * frameMeta.deviceWidth);
         const y = Math.round((canvasY / rect.height) * frameMeta.deviceHeight);
         return { x, y };
       }
 
-      // Fallback: map from displayed size to canvas pixel size
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
       return { x: Math.round(canvasX * scaleX), y: Math.round(canvasY * scaleY) };
@@ -296,6 +297,26 @@ const VIEWER_HTML = `<!DOCTYPE html>
     canvas.addEventListener('mousedown', () => canvas.focus());
 
     // Resolve button
+    // Zoom controls
+    let zoomLevel = 1;
+    function applyZoom() {
+      canvas.style.transform = 'scale(' + zoomLevel + ')';
+      canvas.style.transformOrigin = 'top center';
+      addLog('Zoom: ' + Math.round(zoomLevel * 100) + '%');
+    }
+    document.getElementById('zoom-in-btn').addEventListener('click', () => {
+      zoomLevel = Math.min(zoomLevel + 0.25, 3);
+      applyZoom();
+    });
+    document.getElementById('zoom-out-btn').addEventListener('click', () => {
+      zoomLevel = Math.max(zoomLevel - 0.25, 0.5);
+      applyZoom();
+    });
+    document.getElementById('zoom-reset-btn').addEventListener('click', () => {
+      zoomLevel = 1;
+      applyZoom();
+    });
+
     document.getElementById('back-btn').addEventListener('click', () => {
       encryptAndSend({ type: 'back' });
       addLog('Navigate: back');
