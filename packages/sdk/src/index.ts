@@ -2,6 +2,7 @@ import createDebug from "debug";
 
 const debug = createDebug("authloop:sdk");
 const debugHttp = createDebug("authloop:sdk:http");
+const perf = createDebug("authloop:perf");
 
 export interface AuthloopConfig {
   apiKey: string;
@@ -54,6 +55,7 @@ export class Authloop {
     debug("handoff: service=%s cdpUrl=%s", options.service, options.cdpUrl);
     debugHttp("POST %s/session", this.baseUrl);
 
+    const t0 = Date.now();
     const res = await fetch(`${this.baseUrl}/session`, {
       method: "POST",
       headers: {
@@ -74,6 +76,7 @@ export class Authloop {
       }),
     });
 
+    perf("[perf:sdk] POST /session: %dms (status %d)", Date.now() - t0, res.status);
     debugHttp("POST /session → %d", res.status);
 
     if (!res.ok) {
@@ -99,10 +102,12 @@ export class Authloop {
   async getSession(sessionId: string): Promise<SessionStatus> {
     debugHttp("GET %s/session/%s", this.baseUrl, sessionId);
 
+    const t0 = Date.now();
     const res = await fetch(`${this.baseUrl}/session/${sessionId}`, {
       headers: { Authorization: `Bearer ${this.apiKey}` },
     });
 
+    perf("[perf:sdk] GET /session/%s: %dms (status %d)", sessionId, Date.now() - t0, res.status);
     debugHttp("GET /session/%s → %d", sessionId, res.status);
 
     if (!res.ok) {
@@ -130,11 +135,13 @@ export class Authloop {
     debug("cancelSession: sessionId=%s", sessionId);
     debugHttp("DELETE %s/session/%s", this.baseUrl, sessionId);
 
+    const t0 = Date.now();
     const res = await fetch(`${this.baseUrl}/session/${sessionId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${this.apiKey}` },
     });
 
+    perf("[perf:sdk] DELETE /session/%s: %dms (status %d)", sessionId, Date.now() - t0, res.status);
     debugHttp("DELETE /session/%s → %d", sessionId, res.status);
 
     if (!res.ok) {
@@ -151,11 +158,13 @@ export class Authloop {
     debug("resolveSession: sessionId=%s", sessionId);
     debugHttp("POST %s/session/%s/resolve", this.baseUrl, sessionId);
 
+    const t0 = Date.now();
     const res = await fetch(`${this.baseUrl}/session/${sessionId}/resolve`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.apiKey}` },
     });
 
+    perf("[perf:sdk] POST /session/%s/resolve: %dms (status %d)", sessionId, Date.now() - t0, res.status);
     debugHttp("POST /session/%s/resolve → %d", sessionId, res.status);
 
     if (!res.ok) {

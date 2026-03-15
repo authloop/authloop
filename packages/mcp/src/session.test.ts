@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { runHandoff, _resetActiveSession } from "./session.js";
 
 // Mock the stream module — BrowserStream requires WebSocket + CDP connections
@@ -10,31 +10,51 @@ vi.mock("./stream.js", () => {
   return { BrowserStream };
 });
 
-function createMockClient(opts?: {
-  pollSequence?: string[];
-}) {
-  const pollSequence = opts?.pollSequence ?? ["ACTIVE"];
-  let pollIndex = 0;
+// Mock WebSocket — session.ts connects to relay and waits for viewer_connected
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  private handlers = new Map<string, Function[]>();
+  readyState = 1; // OPEN
 
+  constructor(public url: string) {
+    MockWebSocket.instances.push(this);
+    // Auto-connect on next tick
+    setTimeout(() => this.emit("open", {}), 0);
+  }
+
+  addEventListener(event: string, handler: Function) {
+    const list = this.handlers.get(event) ?? [];
+    list.push(handler);
+    this.handlers.set(event, list);
+  }
+
+  send() {}
+  close() {}
+
+  // Test helpers
+  emit(event: string, data: any) {
+    for (const h of this.handlers.get(event) ?? []) h(data);
+  }
+
+  simulateMessage(data: unknown) {
+    this.emit("message", { data: JSON.stringify(data) });
+  }
+
+  simulateClose() {
+    this.emit("close", {});
+  }
+}
+
+function createMockClient() {
   return {
     handoff: vi.fn().mockResolvedValue({
       sessionId: "sess_123",
-      sessionUrl: "https://app.authloop.ai/s/sess_123",
+      sessionUrl: "https://authloop.ai/session/sess_123",
       streamToken: "tok_abc",
-      streamUrl: "wss://stream.example.com/test",
+      streamUrl: "wss://stream.example.com/stream/sess_123",
       expiresAt: "2026-03-14T12:00:00Z",
     }),
-    getSession: vi.fn().mockImplementation(() => {
-      const status = pollSequence[Math.min(pollIndex, pollSequence.length - 1)];
-      pollIndex++;
-      return Promise.resolve({
-        sessionId: "sess_123",
-        status,
-        service: "Test",
-        createdAt: "c",
-        expiresAt: "e",
-      });
-    }),
+    getSession: vi.fn(),
     resolveSession: vi.fn().mockResolvedValue(undefined),
     cancelSession: vi.fn().mockResolvedValue(undefined),
   };
@@ -42,99 +62,117 @@ function createMockClient(opts?: {
 
 beforeEach(() => {
   _resetActiveSession();
+  MockWebSocket.instances = [];
+  vi.stubGlobal("WebSocket", MockWebSocket);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("runHandoff()", () => {
-  it("creates session and returns session URL on resolution", async () => {
+  it("creates session and returns resolved on viewer_connected + stream resolved", async () => {
     const client = createMockClient();
 
-    const result = await runHandoff(client as any, {
+    const promise = runHandoff(client as any, {
       service: "HDFC NetBanking",
       cdpUrl: "ws://localhost:9222",
       context: { blockerType: "otp", hint: "****1234" },
     });
+
+    // Wait for WebSocket to connect
+    await new Promise((r) => setTimeout(r, 10));
+    const ws = MockWebSocket.instances[0];
+
+    // Simulate viewer joining
+    ws.simulateMessage({ type: "viewer_connected" });
+
+    const result = await promise;
 
     expect(client.handoff).toHaveBeenCalledWith({
       service: "HDFC NetBanking",
       cdpUrl: "ws://localhost:9222",
       context: { blockerType: "otp", hint: "****1234" },
     });
-    expect(result.sessionUrl).toBe("https://app.authloop.ai/s/sess_123");
+    expect(result.sessionUrl).toBe("https://authloop.ai/session/sess_123");
     expect(result.status).toBe("resolved");
   });
 
   it("calls resolveSession on successful resolution", async () => {
     const client = createMockClient();
-    await runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
+
+    const promise = runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
+    await new Promise((r) => setTimeout(r, 10));
+    MockWebSocket.instances[0].simulateMessage({ type: "viewer_connected" });
+
+    await promise;
     expect(client.resolveSession).toHaveBeenCalledWith("sess_123");
   });
 
-  it("polls until ACTIVE before starting stream", async () => {
-    vi.useFakeTimers();
-
-    const client = createMockClient({
-      pollSequence: ["PENDING", "PENDING", "ACTIVE"],
-    });
+  it("returns timeout when session expires while waiting for viewer", async () => {
+    const client = createMockClient();
 
     const promise = runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
+    await new Promise((r) => setTimeout(r, 10));
 
-    // Advance past the two 3s poll delays
-    await vi.advanceTimersByTimeAsync(3000);
-    await vi.advanceTimersByTimeAsync(3000);
+    MockWebSocket.instances[0].simulateMessage({ type: "session_expired" });
 
     const result = await promise;
-
-    expect(client.getSession).toHaveBeenCalledTimes(3);
-    expect(result.status).toBe("resolved");
-
-    vi.useRealTimers();
+    expect(result.status).toBe("timeout");
   });
 
-  it("returns error status when session goes to ERROR without streaming", async () => {
-    const client = createMockClient({ pollSequence: ["ERROR"] });
+  it("returns cancelled when session is cancelled while waiting for viewer", async () => {
+    const client = createMockClient();
 
-    const result = await runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
+    const promise = runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
+    await new Promise((r) => setTimeout(r, 10));
 
+    MockWebSocket.instances[0].simulateMessage({ type: "session_cancelled" });
+
+    const result = await promise;
+    expect(result.status).toBe("cancelled");
+  });
+
+  it("returns error when WebSocket closes while waiting for viewer", async () => {
+    const client = createMockClient();
+
+    const promise = runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    MockWebSocket.instances[0].simulateClose();
+
+    const result = await promise;
     expect(result.status).toBe("error");
   });
 
-  it("returns resolved when session is already RESOLVED during polling", async () => {
-    const client = createMockClient({ pollSequence: ["RESOLVED"] });
+  it("connects WebSocket with correct URL and token", async () => {
+    const client = createMockClient();
 
-    const result = await runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
+    const promise = runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
+    await new Promise((r) => setTimeout(r, 10));
 
-    expect(result.status).toBe("resolved");
-  });
+    const ws = MockWebSocket.instances[0];
+    expect(ws.url).toContain("wss://stream.example.com/stream/sess_123");
+    expect(ws.url).toContain("token=tok_abc");
+    expect(ws.url).toContain("role=agent");
 
-  it("returns timeout status when session goes to TIMEOUT", async () => {
-    const client = createMockClient({ pollSequence: ["TIMEOUT"] });
-
-    const result = await runHandoff(client as any, { service: "Test", cdpUrl: "ws://x" });
-
-    expect(result.status).toBe("timeout");
+    ws.simulateMessage({ type: "viewer_connected" });
+    await promise;
   });
 
   it("rejects concurrent handoffs", async () => {
     const client = createMockClient();
 
-    // Slow down getSession so we can trigger concurrency
-    client.getSession = vi.fn().mockImplementation(
-      () => new Promise((resolve) =>
-        setTimeout(() => resolve({
-          sessionId: "s", status: "ACTIVE", service: "X", createdAt: "c", expiresAt: "e",
-        }), 50),
-      ),
-    );
-
     const p1 = runHandoff(client as any, { service: "Test1", cdpUrl: "ws://x" });
 
-    // Give p1 a moment to start
     await new Promise((r) => setTimeout(r, 10));
 
     await expect(
       runHandoff(client as any, { service: "Test2", cdpUrl: "ws://y" }),
     ).rejects.toThrow("already in progress");
 
+    // Clean up p1
+    MockWebSocket.instances[0].simulateMessage({ type: "session_expired" });
     await p1;
   });
 

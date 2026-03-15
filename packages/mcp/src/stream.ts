@@ -3,6 +3,9 @@
  * Captures browser screencast frames via CDP, sends them as binary JPEG over WebSocket.
  * Receives input events (clicks, keystrokes, scroll) from the human via WebSocket,
  * dispatches them to the browser via CDP.
+ *
+ * The WebSocket is pre-connected by session.ts and passed in — this class does not
+ * manage the WebSocket connection lifecycle.
  */
 
 import createDebug from "debug";
@@ -10,6 +13,7 @@ import { CdpClient } from "./cdp.js";
 import { E2EESession } from "./crypto.js";
 
 const debug = createDebug("authloop:stream");
+const perf = createDebug("authloop:perf");
 
 /** Windows virtual key codes for CDP Input.dispatchKeyEvent */
 const KEY_CODES: Record<string, number> = {
@@ -25,25 +29,31 @@ const KEY_CODES: Record<string, number> = {
 export type StreamResult = "resolved" | "cancelled" | "error" | "timeout";
 
 export class BrowserStream {
-  private ws: WebSocket | null = null;
+  private ws: WebSocket;
   private cdp: CdpClient | null = null;
   private e2ee = new E2EESession();
   private resolveWait: ((result: StreamResult) => void) | null = null;
   private stopped = false;
   private frameCount = 0;
   private lastFrameData: { meta: string; jpeg: Buffer } | null = null;
+  private startTime = 0;
+  private firstFrameSent = false;
 
   constructor(
     private opts: {
-      streamUrl: string;
-      streamToken: string;
+      ws: WebSocket;
       cdpUrl: string;
     },
-  ) {}
+  ) {
+    this.ws = opts.ws;
+  }
 
   async start(): Promise<void> {
+    this.startTime = Date.now();
+
     // 1. Connect to CDP
     debug("connecting to CDP: %s", this.opts.cdpUrl);
+    let t0 = Date.now();
     this.cdp = new CdpClient(this.opts.cdpUrl);
     this.cdp.onClose(() => {
       if (!this.stopped) {
@@ -52,20 +62,15 @@ export class BrowserStream {
       }
     });
     await this.cdp.connect();
+    perf("[perf:stream] CDP connect: %dms", Date.now() - t0);
     debug("CDP connected");
 
-    // 2. Connect WebSocket to stream relay
-    const wsUrl = `${this.opts.streamUrl}?token=${encodeURIComponent(this.opts.streamToken)}&role=agent`;
-    debug("connecting to relay: %s", this.opts.streamUrl);
-    await this.connectWebSocket(wsUrl);
-    debug("relay connected");
-
-    // 3. Send our E2EE public key so the viewer can derive the shared secret
-    this.ws!.send(JSON.stringify({ type: "pubkey", key: this.e2ee.publicKey }));
+    // 2. Send our E2EE public key so the viewer can derive the shared secret
+    this.ws.send(JSON.stringify({ type: "pubkey", key: this.e2ee.publicKey }));
     debug("sent E2EE public key");
 
-    // 4. Listen for messages from the relay (input events + control)
-    this.ws!.addEventListener("message", (event) => {
+    // 3. Listen for messages from the relay (input events + control)
+    this.ws.addEventListener("message", (event) => {
       if (this.stopped) return;
       if (typeof event.data === "string") {
         try {
@@ -77,7 +82,7 @@ export class BrowserStream {
       }
     });
 
-    this.ws!.addEventListener("close", () => {
+    this.ws.addEventListener("close", () => {
       if (!this.stopped) {
         debug("relay WebSocket closed unexpectedly");
         this.resolveWait?.("error");
@@ -103,7 +108,6 @@ export class BrowserStream {
       this.cdp?.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
 
       // Send frame with metadata as a JSON message, then binary JPEG
-      // Protocol: first send metadata JSON, then binary JPEG
       const jpegBuffer = Buffer.from(data, "base64");
       const metaJson = JSON.stringify({
         type: "frame",
@@ -119,11 +123,18 @@ export class BrowserStream {
       // Cache latest frame so we can send it when a viewer connects
       this.lastFrameData = { meta: metaJson, jpeg: jpegBuffer };
 
-      if (this.ws?.readyState === WebSocket.OPEN) {
+      if (this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(metaJson);
         this.ws.send(jpegBuffer);
 
         this.frameCount++;
+
+        if (!this.firstFrameSent) {
+          this.firstFrameSent = true;
+          perf("[perf:stream] CDP → first screencast frame: %dms", Date.now() - this.startTime);
+          perf("[perf:stream] first frame → first relay send: 0ms");
+        }
+
         if (this.frameCount % 100 === 0) {
           debug("sent %d frames", this.frameCount);
         }
@@ -139,6 +150,7 @@ export class BrowserStream {
       everyNthFrame: 1,
     });
     debug("screencast started");
+    perf("[perf:stream] total start() time: %dms", Date.now() - this.startTime);
   }
 
   waitForResolution(): Promise<StreamResult> {
@@ -155,36 +167,15 @@ export class BrowserStream {
     if (this.stopped) return;
     this.stopped = true;
     debug("stopping stream (sent %d frames)", this.frameCount);
+    perf("[perf:stream] frames published: %d", this.frameCount);
+    perf("[perf:stream] session duration: %ds", Math.round((Date.now() - this.startTime) / 1000));
 
     this.cdp?.send("Page.stopScreencast").catch(() => {});
     this.cdp?.close();
     this.cdp = null;
 
-    this.ws?.close();
-    this.ws = null;
+    this.ws.close();
     debug("stream stopped");
-  }
-
-  private async connectWebSocket(url: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(url);
-      this.ws = ws;
-
-      const timeout = setTimeout(() => {
-        ws.close();
-        reject(new Error("WebSocket connection timed out after 15s"));
-      }, 15000);
-
-      ws.addEventListener("open", () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-
-      ws.addEventListener("error", (e) => {
-        clearTimeout(timeout);
-        reject(new Error(`WebSocket error: ${(e as ErrorEvent).message ?? "connection failed"}`));
-      });
-    });
   }
 
   private handleMessage(msg: Record<string, unknown>): void {
@@ -194,6 +185,7 @@ export class BrowserStream {
     if (type === "pubkey") {
       debug("received viewer public key, deriving shared secret");
       this.e2ee.deriveSecret(msg.key as string);
+      perf("[perf:stream] E2EE key exchange: %dms", Date.now() - this.startTime);
       return;
     }
 
@@ -226,7 +218,7 @@ export class BrowserStream {
         return;
       case "viewer_connected":
         debug("viewer connected");
-        if (this.lastFrameData && this.ws?.readyState === WebSocket.OPEN) {
+        if (this.lastFrameData && this.ws.readyState === WebSocket.OPEN) {
           debug("sending cached frame to new viewer");
           this.ws.send(this.lastFrameData.meta);
           this.ws.send(this.lastFrameData.jpeg);

@@ -1,5 +1,5 @@
 /**
- * Session lifecycle: create -> poll -> stream -> resolve
+ * Session lifecycle: create → connect WebSocket → wait for viewer → stream → resolve
  */
 
 import createDebug from "debug";
@@ -7,6 +7,7 @@ import { Authloop } from "@authloop-ai/sdk";
 import { BrowserStream, type StreamResult } from "./stream.js";
 
 const debug = createDebug("authloop:session");
+const perf = createDebug("authloop:perf");
 
 export interface HandoffInput {
   service: string;
@@ -41,6 +42,8 @@ export async function runHandoff(
   debug("starting handoff: service=%s", options.service);
 
   let stream: BrowserStream | null = null;
+  let ws: WebSocket | null = null;
+  const handoffStart = Date.now();
 
   try {
     // 1. Create session via SDK
@@ -50,42 +53,82 @@ export async function runHandoff(
       context: options.context,
     });
     debug("session created: id=%s url=%s", session.sessionId, session.sessionUrl);
+    perf("[perf:session] session created: %dms", Date.now() - handoffStart);
 
-    // 2. Poll until ACTIVE or terminal
-    let status = await client.getSession(session.sessionId);
-    debug("poll: status=%s", status.status);
-    while (status.status === "PENDING") {
-      await new Promise((r) => setTimeout(r, 3000));
-      status = await client.getSession(session.sessionId);
-      debug("poll: status=%s", status.status);
+    // 2. Connect WebSocket immediately (no polling)
+    const wsUrl = `${session.streamUrl}?token=${encodeURIComponent(session.streamToken)}&role=agent`;
+    debug("connecting to relay WebSocket");
+    const wsConnectStart = Date.now();
+
+    ws = await new Promise<WebSocket>((resolve, reject) => {
+      const socket = new WebSocket(wsUrl);
+      const timeout = setTimeout(() => {
+        socket.close();
+        reject(new Error("WebSocket connection timed out after 15s"));
+      }, 15000);
+
+      socket.addEventListener("open", () => {
+        clearTimeout(timeout);
+        resolve(socket);
+      });
+      socket.addEventListener("error", (e) => {
+        clearTimeout(timeout);
+        reject(new Error(`WebSocket error: ${(e as ErrorEvent).message ?? "connection failed"}`));
+      });
+    });
+
+    perf("[perf:session] WebSocket connect: %dms", Date.now() - wsConnectStart);
+    debug("relay connected, waiting for viewer...");
+
+    // 3. Wait for viewer_connected or terminal event (no polling!)
+    const waitStart = Date.now();
+    const waitResult = await new Promise<StreamResult>((resolve) => {
+      ws!.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") return;
+        try {
+          const msg = JSON.parse(event.data) as Record<string, unknown>;
+          if (msg.type === "viewer_connected") {
+            debug("viewer connected");
+            resolve("resolved"); // use "resolved" as signal to proceed
+          } else if (msg.type === "session_expired") {
+            debug("session expired while waiting for viewer");
+            resolve("timeout");
+          } else if (msg.type === "session_cancelled") {
+            debug("session cancelled while waiting for viewer");
+            resolve("cancelled");
+          }
+        } catch {
+          // ignore parse errors
+        }
+      });
+      ws!.addEventListener("close", () => {
+        debug("relay WebSocket closed while waiting for viewer");
+        resolve("error");
+      });
+    });
+
+    perf("[perf:session] wait for viewer: %dms", Date.now() - waitStart);
+
+    if (waitResult !== "resolved") {
+      debug("session terminated before viewer joined: %s", waitResult);
+      ws.close();
+      return { sessionUrl: session.sessionUrl, status: waitResult };
     }
 
-    if (status.status !== "ACTIVE") {
-      const statusMap: Record<string, StreamResult> = {
-        RESOLVED: "resolved",
-        TIMEOUT: "timeout",
-        CANCELLED: "cancelled",
-      };
-      const mapped: StreamResult = statusMap[status.status] ?? "error";
-      debug("session terminated during polling: %s → %s", status.status, mapped);
-      return { sessionUrl: session.sessionUrl, status: mapped };
-    }
-
-    // 3. Start browser stream
+    // 4. Start browser stream — reuse the already-connected WebSocket
     debug("starting browser stream");
     stream = new BrowserStream({
-      streamUrl: session.streamUrl,
-      streamToken: session.streamToken,
+      ws,
       cdpUrl: options.cdpUrl,
     });
     await stream.start();
     debug("browser stream started");
 
-    // 4. Wait for resolution
+    // 5. Wait for resolution
     const result = await stream.waitForResolution();
     debug("stream result: %s", result);
 
-    // 5. Tell the API the outcome
+    // 6. Tell the API the outcome
     if (result === "resolved") {
       debug("resolving session %s", session.sessionId);
       await client.resolveSession(session.sessionId).catch(() => {});
@@ -97,6 +140,10 @@ export async function runHandoff(
     return { sessionUrl: session.sessionUrl, status: result };
   } finally {
     await stream?.stop();
+    // If stream never started, close the WebSocket
+    if (!stream && ws) {
+      ws.close();
+    }
     activeSession = false;
     debug("handoff complete");
   }
