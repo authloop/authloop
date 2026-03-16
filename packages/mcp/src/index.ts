@@ -33,7 +33,16 @@ server.registerTool(
   {
     description:
       "Hand off a login or auth challenge (OTP, captcha, password) to a human who can resolve it remotely. " +
-      "The human sees the live browser, types the credentials, and the agent continues automatically.",
+      "The human sees the live browser, types the credentials, and the agent continues automatically. " +
+      "This tool blocks until the human resolves, cancels, or the session times out. " +
+      "After the tool returns, always verify the browser page has moved past the auth wall before continuing. " +
+      "On error or timeout, you may retry once — do not retry more than twice total.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       service: z.string().describe("Name of the service requiring auth (e.g. 'HDFC NetBanking')"),
       cdp_url: z
@@ -89,6 +98,24 @@ server.registerTool(
 
       debug("authloop_handoff result: status=%s", result.status);
 
+      const guidance: Record<string, string> = {
+        resolved:
+          "The human resolved the auth challenge. " +
+          "Verify the browser page has moved past the auth wall before continuing your task.",
+        cancelled:
+          "The human cancelled the session without resolving the auth challenge. " +
+          "Check the browser page — if the auth wall is still present, ask the user whether to retry.",
+        timeout:
+          "The session expired before the human could resolve it. " +
+          "Check the browser page — if the auth wall is still present, you may retry by calling authloop_handoff again. " +
+          "If you have already retried, inform the user that the handoff timed out and ask how to proceed.",
+        error:
+          "The handoff ended unexpectedly (connection dropped or internal error). " +
+          "Check the browser page — the auth may have been resolved despite the error. " +
+          "If the auth wall is still present, you may retry by calling authloop_handoff again. " +
+          "If you have already retried, inform the user and ask how to proceed.",
+      };
+
       return {
         content: [
           {
@@ -99,13 +126,28 @@ server.registerTool(
               2,
             ),
           },
+          {
+            type: "text" as const,
+            text: guidance[result.status] ?? "Unexpected status. Check the browser page and decide whether to retry.",
+          },
         ],
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       debug("authloop_handoff error: %s", message);
       return {
-        content: [{ type: "text" as const, text: `Handoff failed: ${message}` }],
+        content: [
+          {
+            type: "text" as const,
+            text: `Handoff failed: ${message}`,
+          },
+          {
+            type: "text" as const,
+            text: "Check the browser page — the auth may have been resolved despite the error. " +
+              "If the auth wall is still present, you may retry by calling authloop_handoff again. " +
+              "If you have already retried, inform the user and ask how to proceed.",
+          },
+        ],
         isError: true,
       };
     }
