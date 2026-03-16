@@ -38,10 +38,12 @@ server.registerTool(
       service: z.string().describe("Name of the service requiring auth (e.g. 'HDFC NetBanking')"),
       cdp_url: z
         .string()
+        .optional()
         .describe(
           "CDP endpoint of the browser to screencast. " +
           "Accepts HTTP (http://127.0.0.1:18800) or WebSocket (ws://127.0.0.1:18800/devtools/page/...) URLs. " +
-          "HTTP endpoints are auto-resolved via /json/version.",
+          "HTTP endpoints are auto-resolved via /json/version. " +
+          "Falls back to AUTHLOOP_CDP_URL env var if not provided.",
         ),
       context: z
         .object({
@@ -57,12 +59,25 @@ server.registerTool(
     },
   },
   async (args) => {
-    debug("authloop_handoff called: service=%s cdp_url=%s", args.service, args.cdp_url);
+    const cdpUrl = args.cdp_url ?? process.env.AUTHLOOP_CDP_URL;
+    if (!cdpUrl) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "No CDP URL provided. Either pass cdp_url in the tool call or set the AUTHLOOP_CDP_URL environment variable.",
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    debug("authloop_handoff called: service=%s cdp_url=%s", args.service, cdpUrl);
 
     try {
       const result = await runHandoff(client, {
         service: args.service,
-        cdpUrl: args.cdp_url,
+        cdpUrl,
         context: args.context
           ? {
               url: args.context.url,

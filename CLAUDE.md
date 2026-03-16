@@ -148,6 +148,7 @@ This fetches `/openapi.json` and generates `src/types.generated.ts` in each pack
 ```bash
 AUTHLOOP_API_KEY=al_live_...           # Required — API key from authloop.ai/dashboard
 AUTHLOOP_BASE_URL=https://api.authloop.ai  # Optional — override for local dev
+AUTHLOOP_CDP_URL=http://127.0.0.1:18800   # Optional — default CDP endpoint (used when cdp_url not passed in tool call)
 ```
 
 ### Codegen only (dev-time)

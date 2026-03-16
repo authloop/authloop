@@ -45,7 +45,7 @@ Hand off a login or auth challenge to a human who can resolve it remotely.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `service` | `string` | Yes | Name of the service (e.g. `'HDFC NetBanking'`) |
-| `cdp_url` | `string` | Yes | CDP endpoint — HTTP (`http://127.0.0.1:18800`) or WebSocket URL. HTTP endpoints are auto-resolved via `/json/version`. |
+| `cdp_url` | `string` | No | CDP endpoint — HTTP (`http://127.0.0.1:18800`) or WebSocket URL. HTTP endpoints are auto-resolved via `/json/version`. Falls back to `AUTHLOOP_CDP_URL` env var. |
 | `context.url` | `string` | No | Current page URL |
 | `context.blocker_type` | `string` | No | `'otp'`, `'password'`, `'captcha'`, `'security_question'`, `'document_upload'`, `'other'` |
 | `context.hint` | `string` | No | Hint for the human |
@@ -143,6 +143,7 @@ Debug logs (`DEBUG=authloop:*`) never contain:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `AUTHLOOP_API_KEY` | Yes | API key from [authloop.ai/dashboard](https://authloop.ai/dashboard/api-keys) |
+| `AUTHLOOP_CDP_URL` | No | Default CDP endpoint (used when `cdp_url` not passed in tool call) |
 | `AUTHLOOP_BASE_URL` | No | Override API URL (default: `https://api.authloop.ai`) |
 | `DEBUG` | No | Enable debug logs (e.g. `authloop:*`) |
 
