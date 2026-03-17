@@ -18,8 +18,10 @@ Requires Node.js >= 18 and pnpm 9+.
 
 ```
 packages/
-  sdk/    → @authloop-ai/sdk — TypeScript HTTP client
-  mcp/    → @authloop-ai/mcp — MCP server for AI agents
+  sdk/              → @authloop-ai/sdk — TypeScript SDK for any agent/runtime
+  core/             → @authloop-ai/core — Core engine (CDP screencast, E2EE, WebSocket relay)
+  mcp/              → @authloop-ai/mcp — MCP server for Claude Desktop, Claude Code
+  openclaw-plugin/  → @authloop-ai/openclaw-authloop — OpenClaw native plugin
 ```
 
 ## Making Changes
@@ -33,7 +35,7 @@ packages/
 
 ## Changesets
 
-This repo uses [changesets](https://github.com/changesets/changesets) for versioning. If your PR changes anything that affects published packages (`@authloop-ai/sdk` or `@authloop-ai/mcp`), run `pnpm changeset` before opening your PR. Pick the affected packages, choose a semver bump type, and write a short summary. This creates a file in `.changeset/` that gets included in your PR.
+This repo uses [changesets](https://github.com/changesets/changesets) for versioning. If your PR changes anything that affects published packages (`@authloop-ai/sdk`, `@authloop-ai/core`, `@authloop-ai/mcp`, or `@authloop-ai/openclaw-authloop`), run `pnpm changeset` before opening your PR. Pick the affected packages, choose a semver bump type, and write a short summary. This creates a file in `.changeset/` that gets included in your PR.
 
 ## Commit Messages
 
@@ -54,6 +56,7 @@ This repo uses [changesets](https://github.com/changesets/changesets) for versio
 ```bash
 pnpm test                                    # all packages
 pnpm --filter @authloop-ai/sdk test          # SDK only
+pnpm --filter @authloop-ai/core test         # Core only
 pnpm --filter @authloop-ai/mcp test          # MCP only
 ```
 

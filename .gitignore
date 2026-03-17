@@ -15,6 +15,5 @@ dist
 *.pem
 npm-debug.log*
 
-# Internal docs (moved to private repo)
-docs/PLATFORM_INTEGRATION.md
+# Internal docs
 TASKS.md

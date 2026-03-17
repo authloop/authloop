@@ -1,0 +1,56 @@
+{
+  "name": "@authloop-ai/core",
+  "version": "0.0.0",
+  "description": "Core engine for AuthLoop — CDP screencast, E2EE, WebSocket relay",
+  "type": "module",
+  "license": "MIT",
+  "author": "AuthLoop <hello@authloop.ai> (https://authloop.ai)",
+  "homepage": "https://github.com/authloop-ai/authloop/tree/main/packages/core#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/authloop-ai/authloop.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/authloop-ai/authloop/issues"
+  },
+  "keywords": [
+    "authloop",
+    "authentication",
+    "cdp",
+    "screencast",
+    "e2ee",
+    "websocket",
+    "human-in-the-loop"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "check-types": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@authloop-ai/sdk": "workspace:*",
+    "debug": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/node": "^22.0.0",
+    "typescript": "5.9.3"
+  }
+}

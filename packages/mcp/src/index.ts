@@ -3,9 +3,9 @@
 import createDebug from "debug";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { Authloop } from "@authloop-ai/sdk";
+import { AuthLoop } from "@authloop-ai/sdk";
 import { z } from "zod";
-import { runHandoff } from "./session.js";
+import { startSession, waitForStatus, stopSession } from "@authloop-ai/core";
 
 const debug = createDebug("authloop:mcp");
 
@@ -16,7 +16,7 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const client = new Authloop({
+const authloop = new AuthLoop({
   apiKey,
   baseUrl: process.env.AUTHLOOP_BASE_URL,
 });
@@ -26,17 +26,17 @@ const server = new McpServer({
   version: "0.1.0",
 });
 
-debug("registering authloop_handoff tool");
+// --- Tool 1: authloop_to_human ---
+
+debug("registering authloop_to_human tool");
 
 server.registerTool(
-  "authloop_handoff",
+  "authloop_to_human",
   {
     description:
-      "Hand off a login or auth challenge (OTP, captcha, password) to a human who can resolve it remotely. " +
-      "The human sees the live browser, types the credentials, and the agent continues automatically. " +
-      "This tool blocks until the human resolves, cancels, or the session times out. " +
-      "After the tool returns, always verify the browser page has moved past the auth wall before continuing. " +
-      "On error or timeout, you may retry once — do not retry more than twice total.",
+      "Loop an auth challenge (OTP, captcha, password) to a human who can resolve it remotely. " +
+      "Returns a session_url — send this to the human via your communication channel. " +
+      "After sending the URL, call authloop_status to wait for the human to resolve it.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -81,10 +81,10 @@ server.registerTool(
       };
     }
 
-    debug("authloop_handoff called: service=%s cdp_url=%s", args.service, cdpUrl);
+    debug("authloop_to_human called: service=%s cdp_url=%s", args.service, cdpUrl);
 
     try {
-      const result = await runHandoff(client, {
+      const result = await startSession(authloop, {
         service: args.service,
         cdpUrl,
         context: args.context
@@ -96,7 +96,80 @@ server.registerTool(
           : undefined,
       });
 
-      debug("authloop_handoff result: status=%s", result.status);
+      debug("authloop_to_human result: sessionId=%s", result.sessionId);
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              { session_id: result.sessionId, session_url: result.sessionUrl },
+              null,
+              2,
+            ),
+          },
+          {
+            type: "text" as const,
+            text: "Session created. Send the session_url to the human via your communication channel " +
+              "(Telegram, Slack, email, or show it in chat). " +
+              "Then call authloop_status to wait for the human to resolve the auth challenge.",
+          },
+        ],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      debug("authloop_to_human error: %s", message);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `AuthLoop failed: ${message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+// --- Tool 2: authloop_status ---
+
+debug("registering authloop_status tool");
+
+server.registerTool(
+  "authloop_status",
+  {
+    description:
+      "Wait for an active AuthLoop session to complete. " +
+      "Call this after authloop_to_human and after sending the session_url to the human. " +
+      "This tool blocks until the human resolves, cancels, or the session times out. " +
+      "If status is 'resolved', the auth challenge is complete — verify the browser moved past the auth wall.",
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+    inputSchema: {},
+  },
+  async () => {
+    debug("authloop_status called");
+
+    try {
+      const result = await waitForStatus();
+
+      if (!result) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "No active AuthLoop session. Call authloop_to_human first.",
+            },
+          ],
+        };
+      }
+
+      debug("authloop_status: status=%s", result.status);
 
       const guidance: Record<string, string> = {
         resolved:
@@ -107,13 +180,11 @@ server.registerTool(
           "Check the browser page — if the auth wall is still present, ask the user whether to retry.",
         timeout:
           "The session expired before the human could resolve it. " +
-          "Check the browser page — if the auth wall is still present, you may retry by calling authloop_handoff again. " +
-          "If you have already retried, inform the user that the handoff timed out and ask how to proceed.",
+          "You may retry by calling authloop_to_human again.",
         error:
-          "The handoff ended unexpectedly (connection dropped or internal error). " +
+          "The session ended unexpectedly (connection dropped or internal error). " +
           "Check the browser page — the auth may have been resolved despite the error. " +
-          "If the auth wall is still present, you may retry by calling authloop_handoff again. " +
-          "If you have already retried, inform the user and ask how to proceed.",
+          "If the auth wall is still present, you may retry by calling authloop_to_human again.",
       };
 
       return {
@@ -121,31 +192,25 @@ server.registerTool(
           {
             type: "text" as const,
             text: JSON.stringify(
-              { session_url: result.sessionUrl, status: result.status },
+              { session_id: result.sessionId, session_url: result.sessionUrl, status: result.status },
               null,
               2,
             ),
           },
           {
             type: "text" as const,
-            text: guidance[result.status] ?? "Unexpected status. Check the browser page and decide whether to retry.",
+            text: guidance[result.status] ?? "Unexpected status. Check the browser page.",
           },
         ],
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      debug("authloop_handoff error: %s", message);
+      debug("authloop_status error: %s", message);
       return {
         content: [
           {
             type: "text" as const,
-            text: `Handoff failed: ${message}`,
-          },
-          {
-            type: "text" as const,
-            text: "Check the browser page — the auth may have been resolved despite the error. " +
-              "If the auth wall is still present, you may retry by calling authloop_handoff again. " +
-              "If you have already retried, inform the user and ask how to proceed.",
+            text: `AuthLoop status check failed: ${message}`,
           },
         ],
         isError: true,
@@ -155,9 +220,11 @@ server.registerTool(
 );
 
 // Graceful shutdown
-function shutdown() {
+async function shutdown() {
   debug("shutting down");
-  server.close().then(() => process.exit(0));
+  await stopSession();
+  await server.close();
+  process.exit(0);
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

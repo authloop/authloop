@@ -5,7 +5,7 @@
     { "repo": "authloop-ai/authloop" }
   ],
   "commit": false,
-  "fixed": [["@authloop-ai/sdk", "@authloop-ai/mcp"]],
+  "fixed": [["@authloop-ai/sdk", "@authloop-ai/core", "@authloop-ai/mcp", "@authloop-ai/openclaw-authloop"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",

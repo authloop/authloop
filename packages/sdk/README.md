@@ -2,7 +2,7 @@
 
 TypeScript SDK for [AuthLoop](https://authloop.ai) — human-in-the-loop authentication for AI agents.
 
-When your agent hits an OTP, captcha, or password wall, call `authloop.handoff()` to let a human resolve it in seconds.
+When your agent hits an OTP, captcha, or password wall, call `authloop.toHuman()` to let a human resolve it in seconds.
 
 ## Install
 
@@ -13,12 +13,12 @@ npm install @authloop-ai/sdk
 ## Usage
 
 ```ts
-import { Authloop } from '@authloop-ai/sdk';
+import { AuthLoop } from '@authloop-ai/sdk';
 
-const auth = new Authloop({ apiKey: 'al_live_...' });
+const authloop = new AuthLoop({ apiKey: 'al_live_...' });
 
 // When your agent hits an auth wall:
-const session = await auth.handoff({
+const session = await authloop.toHuman({
   service: 'HDFC NetBanking',
   cdpUrl: 'ws://localhost:9222',
   context: { blockerType: 'otp', hint: 'OTP sent to ****1234' }
@@ -27,22 +27,22 @@ const session = await auth.handoff({
 // Send session.sessionUrl to the human (Telegram, Slack, etc.)
 
 // Wait for the human to resolve it:
-const result = await auth.waitForResolution(session.sessionId);
+const result = await authloop.waitForResolution(session.sessionId);
 // result.status === 'RESOLVED' → agent continues
 ```
 
 ## API
 
-### `new Authloop(config)`
+### `new AuthLoop(config)`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `apiKey` | `string` | Yes | API key from [authloop.ai/dashboard](https://authloop.ai/dashboard/api-keys) |
 | `baseUrl` | `string` | No | Override API base URL (default: `https://api.authloop.ai`) |
 
-### `authloop.handoff(options)`
+### `authloop.toHuman(options)`
 
-Creates a handoff session. Returns `{ sessionId, sessionUrl, streamToken, streamUrl, expiresAt }`.
+Creates a session and loops the auth to a human. Returns `{ sessionId, sessionUrl, streamToken, streamUrl, expiresAt }`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -86,7 +86,7 @@ DEBUG=authloop:*           # all AuthLoop packages (SDK + MCP)
 
 ## Get an API Key
 
-Sign up at [authloop.ai](https://authloop.ai) — 25 free handoffs, no credit card required.
+Sign up at [authloop.ai](https://authloop.ai) — 25 free auth assists, no credit card required.
 
 ## License
 

@@ -15,8 +15,8 @@
  *   - Calls resolve/cancel on the API
  */
 
-import { Authloop } from "../packages/sdk/dist/index.js";
-import { BrowserStream } from "../packages/mcp/dist/stream.js";
+import { AuthLoop } from "../packages/sdk/dist/index.js";
+import { BrowserStream } from "../packages/core/dist/stream.js";
 
 const apiKey = process.env.AUTHLOOP_API_KEY;
 const baseUrl = process.env.AUTHLOOP_BASE_URL || "https://api.authloop.ai";
@@ -27,7 +27,7 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const client = new Authloop({ apiKey, baseUrl });
+const authloop = new AuthLoop({ apiKey, baseUrl });
 
 // Graceful shutdown
 let stream = null;
@@ -49,7 +49,7 @@ console.log("");
 
 // 1. Create session
 console.log("Creating session...");
-const session = await client.handoff({
+const session = await authloop.toHuman({
   service: "E2E Test",
   cdpUrl,
   context: { blockerType: "password", hint: "Full E2E test" },
@@ -114,10 +114,10 @@ console.log("Stream result:", result);
 // 6. Tell the API
 if (result === "resolved") {
   console.log("Resolving session...");
-  await client.resolveSession(session.sessionId).catch(() => {});
+  await authloop.resolveSession(session.sessionId).catch(() => {});
 } else if (result === "cancelled") {
   console.log("Cancelling session...");
-  await client.cancelSession(session.sessionId).catch(() => {});
+  await authloop.cancelSession(session.sessionId).catch(() => {});
 }
 
 await cleanup(result);

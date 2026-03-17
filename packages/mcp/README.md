@@ -2,7 +2,7 @@
 
 MCP server for [AuthLoop](https://authloop.ai) — human-in-the-loop authentication for AI agents.
 
-Exposes the `authloop_handoff` tool so AI agents can hand off auth challenges (OTP, captcha, password) to a human via the [Model Context Protocol](https://modelcontextprotocol.io).
+Exposes `authloop_to_human` and `authloop_status` tools so AI agents can hand off auth challenges (OTP, captcha, password) to a human via the [Model Context Protocol](https://modelcontextprotocol.io).
 
 ## Setup
 
@@ -21,39 +21,55 @@ Add to your MCP client config:
 }
 ```
 
-**OpenClaw** (`openclaw.json`):
+**Claude Code** (`claude_code_config.json`):
 ```json
 {
-  "mcp": {
-    "servers": {
-      "authloop": {
-        "command": "npx",
-        "args": ["-y", "@authloop-ai/mcp"],
-        "env": { "AUTHLOOP_API_KEY": "al_live_..." }
-      }
+  "mcpServers": {
+    "authloop": {
+      "command": "npx",
+      "args": ["-y", "@authloop-ai/mcp"],
+      "env": { "AUTHLOOP_API_KEY": "al_live_..." }
     }
   }
 }
 ```
 
-## Tool: `authloop_handoff`
+> **OpenClaw users**: Use the native plugin [`@authloop-ai/openclaw-authloop`](../openclaw-plugin) instead — install via `openclaw plugins install @authloop-ai/openclaw-authloop`.
 
-Hand off a login or auth challenge to a human who can resolve it remotely.
+## Tools
 
-### Input
+### `authloop_to_human`
+
+Loop an auth challenge to a human. Returns a `session_url` immediately — the agent sends this to the human, then calls `authloop_status` to wait for resolution.
+
+#### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `service` | `string` | Yes | Name of the service (e.g. `'HDFC NetBanking'`) |
-| `cdp_url` | `string` | No | CDP endpoint — HTTP (`http://127.0.0.1:18800`) or WebSocket URL. HTTP endpoints are auto-resolved via `/json/version`. Falls back to `AUTHLOOP_CDP_URL` env var. |
+| `cdp_url` | `string` | No | CDP endpoint — HTTP or WebSocket URL. Falls back to `AUTHLOOP_CDP_URL` env var. |
 | `context.url` | `string` | No | Current page URL |
 | `context.blocker_type` | `string` | No | `'otp'`, `'password'`, `'captcha'`, `'security_question'`, `'document_upload'`, `'other'` |
 | `context.hint` | `string` | No | Hint for the human |
 
-### Output
+#### Output
 
 ```json
 {
+  "session_id": "sess_...",
+  "session_url": "https://authloop.ai/session/sess_..."
+}
+```
+
+### `authloop_status`
+
+Wait for the human to resolve the auth challenge. Blocks until resolved, cancelled, or timed out. No input required.
+
+#### Output
+
+```json
+{
+  "session_id": "sess_...",
   "session_url": "https://authloop.ai/session/sess_...",
   "status": "resolved"
 }
@@ -63,38 +79,13 @@ Status is one of: `resolved`, `cancelled`, `error`, `timeout`.
 
 ## How It Works
 
-```
-Agent                    MCP Server                  Relay                    Human
-  │                          │                         │                       │
-  │ calls authloop_handoff   │                         │                       │
-  │─────────────────────────→│                         │                       │
-  │                          │ POST /session            │                       │
-  │                          │────────────────────────→ │                       │
-  │                          │ connect WSS (instant)    │                       │
-  │                          │────────────────────────→ │                       │
-  │                          │                          │  viewer_connected     │
-  │                          │ ←────────────────────── │ ←─────────────────    │
-  │                          │                          │                       │
-  │                          │ CDP screencast ──→ JPEG frames over WSS ──→    │
-  │                          │                          │                       │
-  │                          │     E2EE encrypted input over WSS ←─────────   │
-  │                          │ CDP dispatch ←────       │                       │
-  │                          │                          │                       │
-  │                          │        { "type": "resolved" } ←────────────    │
-  │                          │ POST /session/:id/resolve│                       │
-  │  { status: "resolved" }  │                         │                       │
-  │←─────────────────────────│                         │                       │
-```
-
-1. Agent calls `authloop_handoff` when it hits an auth wall
-2. MCP server creates a session via the AuthLoop API
-3. Agent sends the `session_url` to the human (Telegram, Slack, etc.)
-4. MCP connects to the relay WebSocket immediately (no polling)
-5. Human opens the URL — relay notifies MCP instantly via `viewer_connected`
-6. MCP starts CDP screencast, JPEG frames stream to the human's browser
-7. Human sees the live browser, clicks and types
-8. All input is end-to-end encrypted (E2EE) and dispatched to the browser via CDP
-9. Human clicks "Done" to resolve or "Cancel" to abort — agent continues with the result
+1. Agent calls `authloop_to_human` when it hits an auth wall → gets `session_url`
+2. Agent sends the `session_url` to the human (show in chat, Telegram, Slack, etc.)
+3. MCP starts CDP screencast in the background, streams to relay
+4. Agent calls `authloop_status` to wait for resolution
+5. Human opens the URL, sees the live browser, types OTP/password (E2EE encrypted)
+6. Keystrokes dispatched to browser via CDP — auth completes
+7. `authloop_status` returns `resolved` → agent continues
 
 ## Security
 
@@ -169,7 +160,7 @@ Works with any Chromium-based browser exposing CDP:
 
 ## Get an API Key
 
-Sign up at [authloop.ai](https://authloop.ai) — 25 free handoffs, no credit card required.
+Sign up at [authloop.ai](https://authloop.ai) — 25 free auth assists, no credit card required.
 
 ## License
 

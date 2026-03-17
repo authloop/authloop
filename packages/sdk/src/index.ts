@@ -4,12 +4,12 @@ const debug = createDebug("authloop:sdk");
 const debugHttp = createDebug("authloop:sdk:http");
 const perf = createDebug("authloop:perf");
 
-export interface AuthloopConfig {
+export interface AuthLoopConfig {
   apiKey: string;
   baseUrl?: string;
 }
 
-export interface HandoffOptions {
+export interface ToHumanOptions {
   service: string;
   cdpUrl: string;
   ttl?: number;
@@ -20,7 +20,7 @@ export interface HandoffOptions {
   };
 }
 
-export interface HandoffResult {
+export interface ToHumanResult {
   sessionId: string;
   sessionUrl: string;
   streamToken: string;
@@ -41,18 +41,18 @@ export interface SessionStatus {
   expiresAt: string;
 }
 
-export class Authloop {
+export class AuthLoop {
   private apiKey: string;
   private baseUrl: string;
 
-  constructor(config: AuthloopConfig) {
+  constructor(config: AuthLoopConfig) {
     this.apiKey = config.apiKey;
     this.baseUrl = config.baseUrl ?? "https://api.authloop.ai";
     debug("initialized with baseUrl=%s", this.baseUrl);
   }
 
-  async handoff(options: HandoffOptions): Promise<HandoffResult> {
-    debug("handoff: service=%s cdpUrl=%s", options.service, options.cdpUrl);
+  async toHuman(options: ToHumanOptions): Promise<ToHumanResult> {
+    debug("toHuman: service=%s cdpUrl=%s", options.service, options.cdpUrl);
     debugHttp("POST %s/session", this.baseUrl);
 
     const t0 = Date.now();
@@ -82,8 +82,8 @@ export class Authloop {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       const code = (body as Record<string, string>).error ?? "request_failed";
-      debug("handoff failed: %d %s", res.status, code);
-      throw new AuthloopError(res.status, code);
+      debug("toHuman failed: %d %s", res.status, code);
+      throw new AuthLoopError(res.status, code);
     }
 
     const data = (await res.json()) as Record<string, string>;
@@ -95,7 +95,7 @@ export class Authloop {
       expiresAt: data.expires_at!,
     };
 
-    debug("handoff created: sessionId=%s expiresAt=%s", result.sessionId, result.expiresAt);
+    debug("toHuman created: sessionId=%s expiresAt=%s", result.sessionId, result.expiresAt);
     return result;
   }
 
@@ -114,7 +114,7 @@ export class Authloop {
       const body = await res.json().catch(() => ({}));
       const code = (body as Record<string, string>).error ?? "request_failed";
       debug("getSession failed: %d %s", res.status, code);
-      throw new AuthloopError(res.status, code);
+      throw new AuthLoopError(res.status, code);
     }
 
     const data = (await res.json()) as Record<string, unknown>;
@@ -148,7 +148,7 @@ export class Authloop {
       const body = await res.json().catch(() => ({}));
       const code = (body as Record<string, string>).error ?? "request_failed";
       debug("cancelSession failed: %d %s", res.status, code);
-      throw new AuthloopError(res.status, code);
+      throw new AuthLoopError(res.status, code);
     }
 
     debug("cancelSession: done");
@@ -171,7 +171,7 @@ export class Authloop {
       const body = await res.json().catch(() => ({}));
       const code = (body as Record<string, string>).error ?? "request_failed";
       debug("resolveSession failed: %d %s", res.status, code);
-      throw new AuthloopError(res.status, code);
+      throw new AuthLoopError(res.status, code);
     }
 
     debug("resolveSession: done");
@@ -199,16 +199,16 @@ export class Authloop {
     }
 
     debug("waitForResolution: poll timeout after %dms", Date.now() - start);
-    throw new AuthloopError(408, "poll_timeout");
+    throw new AuthLoopError(408, "poll_timeout");
   }
 }
 
-export class AuthloopError extends Error {
+export class AuthLoopError extends Error {
   constructor(
     public status: number,
     public code: string,
   ) {
-    super(`Authloop API error: ${code} (${status})`);
-    this.name = "AuthloopError";
+    super(`AuthLoop API error: ${code} (${status})`);
+    this.name = "AuthLoopError";
   }
 }

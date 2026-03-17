@@ -30,8 +30,30 @@ importers:
         specifier: ^8.19.0
         version: 8.19.0
 
+  packages/core:
+    dependencies:
+      '@authloop-ai/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      debug:
+        specifier: ^4.4.3
+        version: 4.4.3(supports-color@10.2.2)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.15
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/mcp:
     dependencies:
+      '@authloop-ai/core':
+        specifier: workspace:*
+        version: link:../core
       '@authloop-ai/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -57,6 +79,22 @@ importers:
       tsx:
         specifier: ^4.19.4
         version: 4.21.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/openclaw-plugin:
+    dependencies:
+      '@authloop-ai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@authloop-ai/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.15
       typescript:
         specifier: 5.9.3
         version: 5.9.3

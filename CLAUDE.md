@@ -1,4 +1,4 @@
-# AuthLoop — Open Source SDK & MCP Server
+# AuthLoop — Open Source SDK, MCP Server & OpenClaw Plugin
 
 Open source packages for integrating AuthLoop into AI agents. When an agent hits an authentication wall (OTP, captcha, password), it calls AuthLoop to hand off to a human who resolves it in seconds.
 
@@ -8,8 +8,10 @@ Open source packages for integrating AuthLoop into AI agents. When an agent hits
 
 ```
 packages/
-  sdk/    → @authloop-ai/sdk — TypeScript SDK for any agent/runtime
-  mcp/    → @authloop-ai/mcp — MCP server for OpenClaw and compatible agents
+  sdk/              → @authloop-ai/sdk — TypeScript SDK for any agent/runtime
+  core/             → @authloop-ai/core — Core engine (CDP screencast, E2EE, WebSocket relay)
+  mcp/              → @authloop-ai/mcp — MCP server for Claude Desktop, Claude Code, and compatible agents
+  openclaw-plugin/  → @authloop-ai/openclaw-authloop — OpenClaw native plugin
 ```
 
 This is a **public** repo. The AuthLoop API server and web app live in a separate private repo. These packages communicate with the API via REST only — they never share code with the server.
@@ -17,7 +19,7 @@ This is a **public** repo. The AuthLoop API server and web app live in a separat
 ## How It Works
 
 1. Agent hits an auth wall (OTP, captcha, password prompt)
-2. Agent calls `authloop.handoff()` (SDK) or uses `authloop_handoff` tool (MCP)
+2. Agent calls `authloop.toHuman()` (SDK) or uses `authloop_to_human` tool (MCP)
 3. AuthLoop API creates a session, returns `session_url` + `stream_url` + `stream_token`
 4. Agent sends `session_url` to the human (via Telegram, Slack, WhatsApp, etc.)
 5. MCP connects to the stream relay via WebSocket
@@ -36,8 +38,8 @@ TypeScript HTTP client wrapping the AuthLoop REST API.
 ```ts
 import { AuthLoop } from '@authloop-ai/sdk';
 
-const auth = new AuthLoop({ apiKey: 'al_live_...' });
-const session = await auth.handoff({
+const authloop = new AuthLoop({ apiKey: 'al_live_...' });
+const session = await authloop.toHuman({
   service: 'HDFC NetBanking',
   cdpUrl: 'ws://localhost:9222',
   context: { blockerType: 'otp', hint: 'OTP sent to ****1234' }
@@ -46,29 +48,29 @@ const session = await auth.handoff({
 // Send session.sessionUrl to the human via notification
 // Publish browser frames using session.streamToken
 // Poll or wait for resolution:
-const result = await auth.waitForResolution(session.sessionId);
+const result = await authloop.waitForResolution(session.sessionId);
 ```
 
 ### @authloop-ai/mcp
 
-MCP server that exposes `authloop_handoff` as a tool. One line in `openclaw.json`:
+MCP server that exposes `authloop_to_human` as a tool. Add to your MCP client config (`claude_desktop_config.json`):
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "authloop": {
-        "command": "npx",
-        "args": ["-y", "@authloop-ai/mcp"],
-        "env": { "AUTHLOOP_API_KEY": "al_live_..." }
-      }
+  "mcpServers": {
+    "authloop": {
+      "command": "npx",
+      "args": ["-y", "@authloop-ai/mcp"],
+      "env": { "AUTHLOOP_API_KEY": "al_live_..." }
     }
   }
 }
 ```
 
+> **OpenClaw users**: Use the native plugin [`@authloop-ai/openclaw-authloop`](./packages/openclaw-plugin) instead.
+
 The MCP server handles:
-- Session creation via `authloop_handoff` tool
+- Session creation via `authloop_to_human` tool
 - CDP screencast capture and JPEG frame streaming over WebSocket
 - E2EE key exchange (ECDH P-256) and decryption (AES-256-GCM) of keystrokes
 - Input dispatch to browser via CDP (click, type, scroll, paste)
@@ -183,14 +185,14 @@ pnpm release              # Build, test, and publish to npm
 
 ## Publishing
 
-This repo uses [changesets](https://github.com/changesets/changesets) for versioning and publishing. Both packages are published to npm under the `@authloop-ai` scope with `"fixed"` versioning (they always share the same version number).
+This repo uses [changesets](https://github.com/changesets/changesets) for versioning and publishing. All packages are published to npm under the `@authloop-ai` scope with `"fixed"` versioning (they always share the same version number).
 
 ### How to release a new version
 
 1. **Add a changeset** — run `pnpm changeset` and follow the prompts. Pick the affected packages, choose a semver bump (patch/minor/major), and write a summary. This creates a markdown file in `.changeset/`.
 2. **Commit and push** — include the changeset file in your PR. CI will pass as normal.
 3. **Merge to main** — the `changesets/action` GitHub Action detects pending changesets and opens a "Version Packages" PR. This PR bumps versions in `package.json`, updates `CHANGELOG.md` in each package, and consumes the changeset files.
-4. **Merge the Version Packages PR** — this triggers the action again, which runs `pnpm release` (build → test → `changeset publish`) and publishes both packages to npm.
+4. **Merge the Version Packages PR** — this triggers the action again, which runs `pnpm release` (build → test → `changeset publish`) and publishes all packages to npm.
 
 ### Manual release (if needed)
 

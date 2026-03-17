@@ -9,11 +9,36 @@ AuthLoop is a human-in-the-loop authentication layer for AI agents. When your ag
 | Package | Description |
 |---------|-------------|
 | [`@authloop-ai/sdk`](./packages/sdk) | TypeScript SDK for any agent runtime |
-| [`@authloop-ai/mcp`](./packages/mcp) | MCP server for Claude Desktop, OpenClaw, and compatible agents |
+| [`@authloop-ai/core`](./packages/core) | Core engine — CDP screencast, E2EE, WebSocket relay |
+| [`@authloop-ai/mcp`](./packages/mcp) | MCP server for Claude Desktop, Claude Code, and compatible agents |
+| [`@authloop-ai/openclaw-authloop`](./packages/openclaw-plugin) | OpenClaw native plugin |
 
 ## Quick Start
 
-### Claude Desktop / OpenClaw (MCP)
+### OpenClaw (Native Plugin)
+
+```bash
+openclaw plugins install @authloop-ai/openclaw-authloop
+```
+
+Then configure the plugin in OpenClaw settings:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "openclaw-authloop": {
+        "enabled": true,
+        "config": {
+          "apiKey": "al_live_..."
+        }
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop / Claude Code (MCP)
 
 Add to your MCP client config:
 
@@ -32,12 +57,12 @@ Add to your MCP client config:
 ### Playwright / Any Agent (SDK)
 
 ```ts
-import { Authloop } from '@authloop-ai/sdk';
+import { AuthLoop } from '@authloop-ai/sdk';
 
-const auth = new Authloop({ apiKey: 'al_live_...' });
+const authloop = new AuthLoop({ apiKey: 'al_live_...' });
 
 // When your agent hits an auth wall:
-const session = await auth.handoff({
+const session = await authloop.toHuman({
   service: 'HDFC NetBanking',
   cdpUrl: page.context().browser()!.wsEndpoint(),
   context: { blockerType: 'otp', hint: 'OTP sent to ****1234' }
@@ -45,7 +70,7 @@ const session = await auth.handoff({
 
 // Send session.sessionUrl to the human (Telegram, Slack, etc.)
 // Wait for the human to resolve it:
-const result = await auth.waitForResolution(session.sessionId);
+const result = await authloop.waitForResolution(session.sessionId);
 // result.status === 'RESOLVED' → agent continues
 ```
 
@@ -55,25 +80,22 @@ const result = await auth.waitForResolution(session.sessionId);
 Agent hits auth wall
   │
   ▼
-authloop.handoff() → creates session → returns session_url
+authloop_to_human → creates session → returns session_url
   │
   ▼
-Agent sends session_url to human (Telegram, Slack, WhatsApp)
+Agent sends session_url to human (Telegram, Slack, chat)
   │
   ▼
-MCP captures browser tab via CDP screencast
+authloop_status → blocks, streams browser via CDP in background
   │
   ▼
-JPEG frames stream to human's browser over encrypted WebSocket
-  │
-  ▼
-Human sees live browser, types OTP/password (E2EE encrypted)
+Human opens URL, sees live browser, types OTP/password (E2EE)
   │
   ▼
 Keystrokes dispatched to browser via CDP → auth completes
   │
   ▼
-Agent continues automatically
+authloop_status returns "resolved" → agent continues
 ```
 
 The entire flow takes under 60 seconds.
@@ -111,7 +133,7 @@ All keystrokes (passwords, OTPs) are end-to-end encrypted between the human's br
 
 Sign up at [authloop.ai](https://authloop.ai) → Dashboard → API Keys.
 
-**25 free handoffs** to get started. No credit card required.
+**25 free auth assists** to get started. No credit card required.
 
 ## Contributing
 

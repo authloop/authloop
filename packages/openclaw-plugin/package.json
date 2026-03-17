@@ -1,38 +1,37 @@
 {
-  "name": "@authloop-ai/mcp",
-  "version": "0.1.1",
-  "description": "MCP server for AuthLoop — hand off OTP, captcha, and password challenges to humans",
+  "name": "@authloop-ai/openclaw-authloop",
+  "version": "0.0.0",
+  "description": "OpenClaw plugin for AuthLoop — hand off OTP, captcha, and password challenges to humans",
   "type": "module",
   "license": "MIT",
   "author": "AuthLoop <hello@authloop.ai> (https://authloop.ai)",
-  "homepage": "https://github.com/authloop-ai/authloop/tree/main/packages/mcp#readme",
+  "homepage": "https://github.com/authloop-ai/authloop/tree/main/packages/openclaw-plugin#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/authloop-ai/authloop.git",
-    "directory": "packages/mcp"
+    "directory": "packages/openclaw-plugin"
   },
   "bugs": {
     "url": "https://github.com/authloop-ai/authloop/issues"
   },
   "keywords": [
     "authloop",
-    "mcp",
-    "model-context-protocol",
+    "openclaw",
     "authentication",
     "otp",
     "captcha",
     "ai-agents",
     "human-in-the-loop",
-    "cdp",
-    "websocket"
+    "plugin"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "authloop-mcp": "./dist/index.js"
+  "openclaw": {
+    "extensions": ["./dist/index.js"]
   },
   "files": [
     "dist",
+    "openclaw.plugin.json",
     "README.md",
     "LICENSE"
   ],
@@ -40,24 +39,16 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc && chmod 755 dist/index.js",
+    "build": "tsc",
     "check-types": "tsc --noEmit",
-    "codegen": "tsx scripts/generate.ts",
-    "codegen:local": "AUTHLOOP_OPENAPI_URL=http://localhost:8787/openapi.json tsx scripts/generate.ts",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@authloop-ai/core": "workspace:*",
     "@authloop-ai/sdk": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "debug": "^4.4.3",
-    "zod": "^3.25.0"
+    "@authloop-ai/core": "workspace:*"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.12",
     "@types/node": "^22.0.0",
-    "openapi-typescript": "^7.8.0",
-    "tsx": "^4.19.4",
     "typescript": "5.9.3"
   }
 }

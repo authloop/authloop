@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Authloop, AuthloopError } from "./index.js";
+import { AuthLoop, AuthLoopError } from "./index.js";
 
 function mockFetch(status: number, body: unknown) {
   return vi.fn().mockResolvedValue({
@@ -13,29 +13,29 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("Authloop", () => {
-  const client = new Authloop({ apiKey: "al_test_key" });
+describe("AuthLoop", () => {
+  const authloop = new AuthLoop({ apiKey: "al_test_key" });
 
   describe("constructor", () => {
     it("uses default base URL", () => {
-      const c = new Authloop({ apiKey: "k" });
+      const c = new AuthLoop({ apiKey: "k" });
       // Verify by making a call and checking the URL
       const spy = mockFetch(200, { session_id: "s1", session_url: "u", stream_token: "t", stream_url: "lk", expires_at: "e" });
       vi.stubGlobal("fetch", spy);
-      c.handoff({ service: "test", cdpUrl: "ws://x" });
+      c.toHuman({ service: "test", cdpUrl: "ws://x" });
       expect(spy).toHaveBeenCalledWith("https://api.authloop.ai/session", expect.anything());
     });
 
     it("uses custom base URL", () => {
-      const c = new Authloop({ apiKey: "k", baseUrl: "http://localhost:8787" });
+      const c = new AuthLoop({ apiKey: "k", baseUrl: "http://localhost:8787" });
       const spy = mockFetch(200, { session_id: "s1", session_url: "u", stream_token: "t", stream_url: "lk", expires_at: "e" });
       vi.stubGlobal("fetch", spy);
-      c.handoff({ service: "test", cdpUrl: "ws://x" });
+      c.toHuman({ service: "test", cdpUrl: "ws://x" });
       expect(spy).toHaveBeenCalledWith("http://localhost:8787/session", expect.anything());
     });
   });
 
-  describe("handoff()", () => {
+  describe("toHuman()", () => {
     it("sends correct request body with snake_case keys", async () => {
       const spy = mockFetch(200, {
         session_id: "sess_123",
@@ -46,7 +46,7 @@ describe("Authloop", () => {
       });
       vi.stubGlobal("fetch", spy);
 
-      await client.handoff({
+      await authloop.toHuman({
         service: "HDFC NetBanking",
         cdpUrl: "ws://localhost:9222",
         ttl: 300,
@@ -74,7 +74,7 @@ describe("Authloop", () => {
         expires_at: "2026-03-14T12:00:00Z",
       }));
 
-      const result = await client.handoff({ service: "Test", cdpUrl: "ws://x" });
+      const result = await authloop.toHuman({ service: "Test", cdpUrl: "ws://x" });
 
       expect(result).toEqual({
         sessionId: "sess_123",
@@ -91,24 +91,24 @@ describe("Authloop", () => {
       });
       vi.stubGlobal("fetch", spy);
 
-      await client.handoff({ service: "Test", cdpUrl: "ws://x" });
+      await authloop.toHuman({ service: "Test", cdpUrl: "ws://x" });
 
       const body = JSON.parse(spy.mock.calls[0][1].body);
       expect(body.context).toBeUndefined();
     });
 
-    it("throws AuthloopError on API error", async () => {
+    it("throws AuthLoopError on API error", async () => {
       vi.stubGlobal("fetch", mockFetch(401, { error: "invalid_api_key" }));
 
-      await expect(client.handoff({ service: "Test", cdpUrl: "ws://x" }))
-        .rejects.toThrow(AuthloopError);
+      await expect(authloop.toHuman({ service: "Test", cdpUrl: "ws://x" }))
+        .rejects.toThrow(AuthLoopError);
 
       try {
-        await client.handoff({ service: "Test", cdpUrl: "ws://x" });
+        await authloop.toHuman({ service: "Test", cdpUrl: "ws://x" });
       } catch (e) {
-        expect(e).toBeInstanceOf(AuthloopError);
-        expect((e as AuthloopError).status).toBe(401);
-        expect((e as AuthloopError).code).toBe("invalid_api_key");
+        expect(e).toBeInstanceOf(AuthLoopError);
+        expect((e as AuthLoopError).status).toBe(401);
+        expect((e as AuthLoopError).code).toBe("invalid_api_key");
       }
     });
 
@@ -119,13 +119,13 @@ describe("Authloop", () => {
         json: () => Promise.reject(new Error("not json")),
       }));
 
-      await expect(client.handoff({ service: "Test", cdpUrl: "ws://x" }))
-        .rejects.toThrow(AuthloopError);
+      await expect(authloop.toHuman({ service: "Test", cdpUrl: "ws://x" }))
+        .rejects.toThrow(AuthLoopError);
 
       try {
-        await client.handoff({ service: "Test", cdpUrl: "ws://x" });
+        await authloop.toHuman({ service: "Test", cdpUrl: "ws://x" });
       } catch (e) {
-        expect((e as AuthloopError).code).toBe("request_failed");
+        expect((e as AuthLoopError).code).toBe("request_failed");
       }
     });
   });
@@ -141,7 +141,7 @@ describe("Authloop", () => {
         expires_at: "2026-03-14T12:00:00Z",
       }));
 
-      const result = await client.getSession("sess_123");
+      const result = await authloop.getSession("sess_123");
 
       expect(result).toEqual({
         sessionId: "sess_123",
@@ -160,7 +160,7 @@ describe("Authloop", () => {
       });
       vi.stubGlobal("fetch", spy);
 
-      await client.getSession("sess_456");
+      await authloop.getSession("sess_456");
 
       expect(spy).toHaveBeenCalledWith(
         "https://api.authloop.ai/session/sess_456",
@@ -174,7 +174,7 @@ describe("Authloop", () => {
       const spy = mockFetch(204, {});
       vi.stubGlobal("fetch", spy);
 
-      await client.cancelSession("sess_123");
+      await authloop.cancelSession("sess_123");
 
       expect(spy).toHaveBeenCalledWith(
         "https://api.authloop.ai/session/sess_123",
@@ -184,7 +184,7 @@ describe("Authloop", () => {
 
     it("throws on error", async () => {
       vi.stubGlobal("fetch", mockFetch(404, { error: "session_not_found" }));
-      await expect(client.cancelSession("bad")).rejects.toThrow(AuthloopError);
+      await expect(authloop.cancelSession("bad")).rejects.toThrow(AuthLoopError);
     });
   });
 
@@ -193,7 +193,7 @@ describe("Authloop", () => {
       const spy = mockFetch(200, {});
       vi.stubGlobal("fetch", spy);
 
-      await client.resolveSession("sess_123");
+      await authloop.resolveSession("sess_123");
 
       expect(spy).toHaveBeenCalledWith(
         "https://api.authloop.ai/session/sess_123/resolve",
@@ -209,7 +209,7 @@ describe("Authloop", () => {
         created_at: "c", expires_at: "e",
       }));
 
-      const result = await client.waitForResolution("sess_123");
+      const result = await authloop.waitForResolution("sess_123");
       expect(result.status).toBe("RESOLVED");
     });
 
@@ -228,7 +228,7 @@ describe("Authloop", () => {
         });
       }));
 
-      const result = await client.waitForResolution("sess_123", { pollInterval: 10 });
+      const result = await authloop.waitForResolution("sess_123", { pollInterval: 10 });
       expect(result.status).toBe("RESOLVED");
       expect(callCount).toBe(3);
     });
@@ -239,7 +239,7 @@ describe("Authloop", () => {
         created_at: "c", expires_at: "e",
       }));
 
-      const result = await client.waitForResolution("sess_123");
+      const result = await authloop.waitForResolution("sess_123");
       expect(result.status).toBe("ERROR");
     });
 
@@ -250,18 +250,18 @@ describe("Authloop", () => {
       }));
 
       await expect(
-        client.waitForResolution("sess_123", { pollInterval: 10, timeout: 50 }),
-      ).rejects.toThrow(AuthloopError);
+        authloop.waitForResolution("sess_123", { pollInterval: 10, timeout: 50 }),
+      ).rejects.toThrow(AuthLoopError);
     });
   });
 });
 
-describe("AuthloopError", () => {
+describe("AuthLoopError", () => {
   it("has correct properties", () => {
-    const err = new AuthloopError(402, "quota_exceeded");
+    const err = new AuthLoopError(402, "quota_exceeded");
     expect(err.status).toBe(402);
     expect(err.code).toBe("quota_exceeded");
-    expect(err.name).toBe("AuthloopError");
+    expect(err.name).toBe("AuthLoopError");
     expect(err.message).toContain("quota_exceeded");
     expect(err.message).toContain("402");
     expect(err).toBeInstanceOf(Error);
