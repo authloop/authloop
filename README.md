@@ -1,6 +1,6 @@
 # AuthLoop
 
-**When AI can't get in, you step in.**
+**Some doors only you should open.**
 
 AuthLoop is a human-in-the-loop authentication layer for AI agents. When your agent hits an OTP, captcha, or password wall — the human gets a tap-to-resolve notification, sees the live browser tab, types the code, and the agent continues.
 
