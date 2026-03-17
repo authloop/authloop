@@ -1,6 +1,6 @@
 {
   "name": "@authloop-ai/openclaw-authloop",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "description": "OpenClaw plugin for AuthLoop — hand off OTP, captcha, and password challenges to humans",
   "type": "module",
   "license": "MIT",
@@ -27,7 +27,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "openclaw": {
-    "extensions": ["./dist/index.js"]
+    "extensions": [
+      "./dist/index.js"
+    ]
   },
   "files": [
     "dist",

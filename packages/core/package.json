@@ -1,6 +1,6 @@
 {
   "name": "@authloop-ai/core",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "description": "Core engine for AuthLoop — CDP screencast, E2EE, WebSocket relay",
   "type": "module",
   "license": "MIT",
