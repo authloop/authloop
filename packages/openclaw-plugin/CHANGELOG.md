@@ -1,5 +1,13 @@
 # @authloop-ai/openclaw-authloop
 
+## 0.2.1
+
+### Patch Changes
+
+- 46aabe8: Add ASCII QR code and display hints to authloop_to_human tool response. Improved plugin setup error message with step-by-step instructions.
+  - @authloop-ai/sdk@0.2.1
+  - @authloop-ai/core@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

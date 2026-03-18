@@ -1,6 +1,6 @@
 {
   "name": "@authloop-ai/openclaw-authloop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "OpenClaw plugin for AuthLoop — hand off OTP, captcha, and password challenges to humans",
   "type": "module",
   "license": "MIT",

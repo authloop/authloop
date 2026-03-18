@@ -1,5 +1,11 @@
 # @authloop-ai/core
 
+## 0.2.1
+
+### Patch Changes
+
+- @authloop-ai/sdk@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes
