@@ -47,10 +47,12 @@
   },
   "dependencies": {
     "@authloop-ai/sdk": "workspace:*",
-    "@authloop-ai/core": "workspace:*"
+    "@authloop-ai/core": "workspace:*",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.6",
     "typescript": "5.9.3"
   }
 }

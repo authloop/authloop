@@ -6,6 +6,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { AuthLoop } from "@authloop-ai/sdk";
 import { z } from "zod";
 import { startSession, waitForStatus, stopSession } from "@authloop-ai/core";
+import QRCode from "qrcode";
 
 const debug = createDebug("authloop:mcp");
 
@@ -98,12 +99,19 @@ server.registerTool(
 
       debug("authloop_to_human result: sessionId=%s", result.sessionId);
 
+      const qrAscii = await QRCode.toString(result.sessionUrl, { type: "utf8" });
+
       return {
         content: [
           {
             type: "text" as const,
             text: JSON.stringify(
-              { session_id: result.sessionId, session_url: result.sessionUrl },
+              {
+                session_id: result.sessionId,
+                session_url: result.sessionUrl,
+                qr_ascii: qrAscii,
+                display: { showQR: true, showLink: true },
+              },
               null,
               2,
             ),
