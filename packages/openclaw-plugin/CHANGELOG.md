@@ -1,5 +1,14 @@
 # @authloop-ai/openclaw-authloop
 
+## 0.2.2
+
+### Patch Changes
+
+- 916597c: Add server TTL-based timeout to waitForStatus so it never blocks forever. Replace QR ASCII generation with display hints — agent/channel handles QR rendering natively. Remove qrcode dependency.
+- Updated dependencies [916597c]
+  - @authloop-ai/core@0.2.2
+  - @authloop-ai/sdk@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@authloop-ai/mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "MCP server for AuthLoop — hand off OTP, captcha, and password challenges to humans",
   "type": "module",
   "license": "MIT",
@@ -51,12 +51,12 @@
     "@authloop-ai/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "debug": "^4.4.3",
-"zod": "^3.25.0"
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
     "@types/node": "^22.0.0",
-"openapi-typescript": "^7.8.0",
+    "openapi-typescript": "^7.8.0",
     "tsx": "^4.19.4",
     "typescript": "5.9.3"
   }
