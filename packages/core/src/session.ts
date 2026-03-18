@@ -48,6 +48,7 @@ interface ActiveSession {
   ws: WebSocket;
   cdpUrl: string;
   startTime: number;
+  expiresAt: string;
   /** Resolves when status changes from "streaming" to a terminal state */
   onTerminal: Promise<StreamResult>;
   resolveTerminal: ((result: StreamResult) => void) | null;
@@ -142,6 +143,7 @@ export async function startSession(
     ws,
     cdpUrl: options.cdpUrl,
     startTime,
+    expiresAt: session.expiresAt,
     onTerminal,
     resolveTerminal,
   };
@@ -240,11 +242,25 @@ export async function waitForStatus(): Promise<SessionStatusOutput | null> {
     return result;
   }
 
-  // Block until terminal
-  const terminalResult = await active.onTerminal;
+  // Race terminal promise against session expiry
+  const msUntilExpiry = new Date(active.expiresAt).getTime() - Date.now();
+  const safeTimeout = Math.max(msUntilExpiry + 5000, 30000); // server TTL + 5s buffer, min 30s
+  debug("waitForStatus: timeout in %ds", Math.round(safeTimeout / 1000));
+
+  const terminalResult = await Promise.race([
+    active.onTerminal,
+    new Promise<StreamResult>((resolve) =>
+      setTimeout(() => resolve("timeout"), safeTimeout),
+    ),
+  ]);
 
   // active may have been cleared by stopSession() during the wait
   if (!active) return null;
+
+  // If we timed out client-side, trigger cleanup
+  if (terminalResult === "timeout" && active.status === "streaming") {
+    setTerminalStatus("timeout");
+  }
 
   const result: SessionStatusOutput = {
     sessionId: active.sessionId,
