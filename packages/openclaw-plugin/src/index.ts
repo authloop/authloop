@@ -7,7 +7,13 @@ export default function register(api: any) {
   const baseUrl = config.baseUrl ?? process.env.AUTHLOOP_BASE_URL;
 
   if (!apiKey) {
-    api.logger?.warn?.("AuthLoop: no API key configured (set apiKey in plugin config or AUTHLOOP_API_KEY env var)");
+    api.logger?.warn?.(
+      "AuthLoop: API key not configured. To complete setup:\n" +
+      "  1. Get a key at https://authloop.ai/dashboard/api-keys (25 free auth assists)\n" +
+      '  2. openclaw config set plugins.entries.openclaw-authloop.config.apiKey "al_live_..."\n' +
+      "  3. openclaw plugins enable openclaw-authloop\n" +
+      "  4. openclaw gateway restart",
+    );
     return;
   }
 

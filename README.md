@@ -19,23 +19,9 @@ AuthLoop is a human-in-the-loop authentication layer for AI agents. When your ag
 
 ```bash
 openclaw plugins install @authloop-ai/openclaw-authloop
-```
-
-Then configure the plugin in OpenClaw settings:
-
-```json
-{
-  "plugins": {
-    "entries": {
-      "openclaw-authloop": {
-        "enabled": true,
-        "config": {
-          "apiKey": "al_live_..."
-        }
-      }
-    }
-  }
-}
+openclaw config set plugins.entries.openclaw-authloop.config.apiKey "al_live_..."
+openclaw plugins enable openclaw-authloop
+openclaw gateway restart
 ```
 
 ### Claude Desktop / Claude Code (MCP)

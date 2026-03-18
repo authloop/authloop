@@ -4,15 +4,20 @@ OpenClaw native plugin for [AuthLoop](https://authloop.ai) — human-in-the-loop
 
 Registers the `authloop_to_human` and `authloop_status` tools so OpenClaw agents can hand off auth challenges (OTP, captcha, password) to a human who resolves them remotely.
 
-## Install
+## Quick Start
 
 ```bash
 openclaw plugins install @authloop-ai/openclaw-authloop
+openclaw config set plugins.entries.openclaw-authloop.config.apiKey "al_live_..."
+openclaw plugins enable openclaw-authloop
+openclaw gateway restart
 ```
 
-## Configure
+Get your API key at [authloop.ai/dashboard/api-keys](https://authloop.ai/dashboard/api-keys) — 25 free auth assists, no credit card required.
 
-In your OpenClaw settings, configure the AuthLoop plugin:
+## Alternative: JSON Config
+
+Instead of the CLI commands above, you can add this to your `openclaw.json`:
 
 ```json
 {
@@ -29,29 +34,11 @@ In your OpenClaw settings, configure the AuthLoop plugin:
 }
 ```
 
-To silence the `plugins.allow` advisory, explicitly allowlist the plugin:
-
-```json
-{
-  "plugins": {
-    "allow": ["openclaw-authloop"],
-    "entries": {
-      "openclaw-authloop": {
-        "enabled": true,
-        "config": {
-          "apiKey": "al_live_..."
-        }
-      }
-    }
-  }
-}
-```
-
-Or set the `AUTHLOOP_API_KEY` environment variable.
+To silence the `plugins.allow` advisory, add `"allow": ["openclaw-authloop"]` under `plugins`.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `AUTHLOOP_API_KEY` | Yes | API key from [authloop.ai/dashboard](https://authloop.ai/dashboard/api-keys) |
+| `AUTHLOOP_API_KEY` | Yes | Alternative to config — set as environment variable |
 | `AUTHLOOP_BASE_URL` | No | Override API URL (default: `https://api.authloop.ai`) |
 
 ## Tools
