@@ -1,6 +1,5 @@
 import { AuthLoop } from "@authloop-ai/sdk";
 import { startSession, waitForStatus, stopSession } from "@authloop-ai/core";
-import QRCode from "qrcode";
 
 export default function register(api: any) {
   const config = api.config?.plugins?.entries?.["openclaw-authloop"]?.config ?? {};
@@ -101,14 +100,11 @@ export default function register(api: any) {
             : undefined,
         });
 
-        const qrAscii = await QRCode.toString(result.sessionUrl, { type: "utf8" });
-
         return {
           content: [
             { type: "text", text: JSON.stringify({
               session_id: result.sessionId,
               session_url: result.sessionUrl,
-              qr_ascii: qrAscii,
               display: { showQR: true, showLink: true },
             }, null, 2) },
             {
