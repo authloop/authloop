@@ -1,7 +1,9 @@
 /**
  * End-to-end encryption for the keystroke relay.
  *
- * Uses ECDH (P-256) key exchange + AES-256-GCM.
+ * Uses ECDH (P-256) key exchange + AES-256-GCM via the Web Crypto API.
+ * Works in Node 18+, Chrome extensions, and any environment with crypto.subtle.
+ *
  * The relay only sees ciphertext — it cannot read passwords or OTPs.
  *
  * Flow:
@@ -13,69 +15,151 @@
  *   6. Frames (screenshots) are NOT encrypted — they show visible page content only
  */
 
-import { createECDH, createDecipheriv, createCipheriv, randomBytes } from "node:crypto";
 import createDebug from "debug";
 
 const debug = createDebug("authloop:crypto");
 
+// ---------------------------------------------------------------------------
+// Portable base64 helpers (no Buffer, works in browser + Node)
+// ---------------------------------------------------------------------------
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// ---------------------------------------------------------------------------
+// E2EESession
+// ---------------------------------------------------------------------------
+
 export class E2EESession {
-  private ecdh = createECDH("prime256v1");
-  private sharedSecret: Buffer | null = null;
+  private keyPair: CryptoKeyPair;
+  private aesKey: CryptoKey | null = null;
   private _publicKey: string;
 
-  constructor() {
-    this.ecdh.generateKeys();
-    this._publicKey = this.ecdh.getPublicKey("base64");
-    debug("generated keypair, public key: %s...", this._publicKey.slice(0, 20));
+  /** Use `E2EESession.create()` instead of `new`. */
+  private constructor(keyPair: CryptoKeyPair, publicKeyBase64: string) {
+    this.keyPair = keyPair;
+    this._publicKey = publicKeyBase64;
   }
 
-  /** Our public key to send to the viewer */
+  /**
+   * Create a new E2EE session (generates an ECDH P-256 keypair).
+   */
+  static async create(): Promise<E2EESession> {
+    const keyPair = await crypto.subtle.generateKey(
+      { name: "ECDH", namedCurve: "P-256" },
+      false, // not extractable — we only need to derive
+      ["deriveBits"],
+    );
+
+    // Export public key as uncompressed point (same wire format as node:crypto)
+    const rawPub = new Uint8Array(await crypto.subtle.exportKey("raw", keyPair.publicKey));
+    const publicKeyBase64 = uint8ToBase64(rawPub);
+    debug("generated keypair, public key: %s...", publicKeyBase64.slice(0, 20));
+
+    return new E2EESession(keyPair, publicKeyBase64);
+  }
+
+  /** Our public key to send to the peer (base64-encoded uncompressed point). */
   get publicKey(): string {
     return this._publicKey;
   }
 
-  /** Derive shared secret from the viewer's public key */
-  deriveSecret(viewerPublicKey: string): void {
-    const secret = this.ecdh.computeSecret(Buffer.from(viewerPublicKey, "base64"));
-    // Use first 32 bytes as AES-256 key
-    this.sharedSecret = secret.subarray(0, 32);
+  /** Derive shared secret from the peer's public key. */
+  async deriveSecret(peerPublicKeyBase64: string): Promise<void> {
+    const rawBytes = base64ToUint8(peerPublicKeyBase64);
+
+    // Import the peer's raw public key
+    const peerKey = await crypto.subtle.importKey(
+      "raw",
+      rawBytes.buffer as ArrayBuffer,
+      { name: "ECDH", namedCurve: "P-256" },
+      false,
+      [],
+    );
+
+    // Derive 256 bits of shared secret
+    const secretBits = await crypto.subtle.deriveBits(
+      { name: "ECDH", public: peerKey },
+      this.keyPair.privateKey,
+      256, // 32 bytes
+    );
+
+    // Import as AES-256-GCM key
+    this.aesKey = await crypto.subtle.importKey(
+      "raw",
+      secretBits,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"],
+    );
+
     debug("shared secret derived");
   }
 
-  /** Check if key exchange is complete */
+  /** Check if key exchange is complete. */
   get ready(): boolean {
-    return this.sharedSecret !== null;
+    return this.aesKey !== null;
   }
 
-  /** Decrypt a message from the viewer */
-  decrypt(encrypted: { iv: string; ciphertext: string; tag: string }): string {
-    if (!this.sharedSecret) throw new Error("E2EE not ready — key exchange incomplete");
+  /** Decrypt a message from the peer. */
+  async decrypt(encrypted: { iv: string; ciphertext: string; tag: string }): Promise<string> {
+    if (!this.aesKey) throw new Error("E2EE not ready — key exchange incomplete");
 
-    const iv = Buffer.from(encrypted.iv, "base64");
-    const ciphertext = Buffer.from(encrypted.ciphertext, "base64");
-    const tag = Buffer.from(encrypted.tag, "base64");
+    const iv = base64ToUint8(encrypted.iv);
+    const ciphertext = base64ToUint8(encrypted.ciphertext);
+    const tag = base64ToUint8(encrypted.tag);
 
-    const decipher = createDecipheriv("aes-256-gcm", this.sharedSecret, iv);
-    decipher.setAuthTag(tag);
+    // Web Crypto expects ciphertext + tag concatenated
+    const combined = new Uint8Array(ciphertext.length + tag.length);
+    combined.set(ciphertext);
+    combined.set(tag, ciphertext.length);
 
-    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    return decrypted.toString("utf8");
+    const plainBuf = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: iv as BufferSource, tagLength: 128 },
+      this.aesKey,
+      combined as BufferSource,
+    );
+
+    return new TextDecoder().decode(plainBuf);
   }
 
-  /** Encrypt a message to the viewer (for testing / future use) */
-  encrypt(plaintext: string): { iv: string; ciphertext: string; tag: string } {
-    if (!this.sharedSecret) throw new Error("E2EE not ready — key exchange incomplete");
+  /** Encrypt a message to the peer. */
+  async encrypt(plaintext: string): Promise<{ iv: string; ciphertext: string; tag: string }> {
+    if (!this.aesKey) throw new Error("E2EE not ready — key exchange incomplete");
 
-    const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", this.sharedSecret, iv);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(plaintext);
 
-    const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-    const tag = cipher.getAuthTag();
+    const combined = new Uint8Array(
+      await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv as BufferSource, tagLength: 128 },
+        this.aesKey,
+        encoded as BufferSource,
+      ),
+    );
+
+    // Web Crypto returns ciphertext + tag concatenated; split them
+    const ciphertext = combined.subarray(0, combined.length - 16);
+    const tag = combined.subarray(combined.length - 16);
 
     return {
-      iv: iv.toString("base64"),
-      ciphertext: ciphertext.toString("base64"),
-      tag: tag.toString("base64"),
+      iv: uint8ToBase64(iv),
+      ciphertext: uint8ToBase64(ciphertext),
+      tag: uint8ToBase64(tag),
     };
   }
 }

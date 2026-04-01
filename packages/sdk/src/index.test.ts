@@ -19,18 +19,17 @@ describe("AuthLoop", () => {
   describe("constructor", () => {
     it("uses default base URL", () => {
       const c = new AuthLoop({ apiKey: "k" });
-      // Verify by making a call and checking the URL
-      const spy = mockFetch(200, { session_id: "s1", session_url: "u", stream_token: "t", stream_url: "lk", expires_at: "e" });
+      const spy = mockFetch(200, { session_id: "s1", session_url: "u", capture: "extension", expires_at: "e" });
       vi.stubGlobal("fetch", spy);
-      c.toHuman({ service: "test", cdpUrl: "ws://x" });
+      c.toHuman({ service: "test" });
       expect(spy).toHaveBeenCalledWith("https://api.authloop.ai/session", expect.anything());
     });
 
     it("uses custom base URL", () => {
       const c = new AuthLoop({ apiKey: "k", baseUrl: "http://localhost:8787" });
-      const spy = mockFetch(200, { session_id: "s1", session_url: "u", stream_token: "t", stream_url: "lk", expires_at: "e" });
+      const spy = mockFetch(200, { session_id: "s1", session_url: "u", capture: "extension", expires_at: "e" });
       vi.stubGlobal("fetch", spy);
-      c.toHuman({ service: "test", cdpUrl: "ws://x" });
+      c.toHuman({ service: "test" });
       expect(spy).toHaveBeenCalledWith("http://localhost:8787/session", expect.anything());
     });
   });
@@ -40,15 +39,13 @@ describe("AuthLoop", () => {
       const spy = mockFetch(200, {
         session_id: "sess_123",
         session_url: "https://app.authloop.ai/s/sess_123",
-        stream_token: "tok_abc",
-        stream_url: "wss://lk.authloop.ai",
+        capture: "extension",
         expires_at: "2026-03-14T12:00:00Z",
       });
       vi.stubGlobal("fetch", spy);
 
       await authloop.toHuman({
         service: "HDFC NetBanking",
-        cdpUrl: "ws://localhost:9222",
         ttl: 300,
         context: { url: "https://hdfc.com", blockerType: "otp", hint: "OTP sent to ****1234" },
       });
@@ -57,7 +54,6 @@ describe("AuthLoop", () => {
       const body = JSON.parse(init.body);
       expect(body).toEqual({
         service: "HDFC NetBanking",
-        cdp_url: "ws://localhost:9222",
         ttl: 300,
         context: { url: "https://hdfc.com", blocker_type: "otp", hint: "OTP sent to ****1234" },
       });
@@ -65,33 +61,43 @@ describe("AuthLoop", () => {
       expect(init.headers["Content-Type"]).toBe("application/json");
     });
 
-    it("returns camelCase result", async () => {
+    it("returns camelCase result with capture field", async () => {
       vi.stubGlobal("fetch", mockFetch(200, {
         session_id: "sess_123",
         session_url: "https://app.authloop.ai/s/sess_123",
-        stream_token: "tok_abc",
-        stream_url: "wss://lk.authloop.ai",
+        capture: "extension",
         expires_at: "2026-03-14T12:00:00Z",
       }));
 
-      const result = await authloop.toHuman({ service: "Test", cdpUrl: "ws://x" });
+      const result = await authloop.toHuman({ service: "Test" });
 
       expect(result).toEqual({
         sessionId: "sess_123",
         sessionUrl: "https://app.authloop.ai/s/sess_123",
-        streamToken: "tok_abc",
-        streamUrl: "wss://lk.authloop.ai",
+        capture: "extension",
         expiresAt: "2026-03-14T12:00:00Z",
       });
     });
 
-    it("omits context when not provided", async () => {
+    it("does not send cdpUrl (removed in v2)", async () => {
       const spy = mockFetch(200, {
-        session_id: "s", session_url: "u", stream_token: "t", stream_url: "l", expires_at: "e",
+        session_id: "s", session_url: "u", capture: "extension", expires_at: "e",
       });
       vi.stubGlobal("fetch", spy);
 
-      await authloop.toHuman({ service: "Test", cdpUrl: "ws://x" });
+      await authloop.toHuman({ service: "Test" });
+
+      const body = JSON.parse(spy.mock.calls[0][1].body);
+      expect(body.cdp_url).toBeUndefined();
+    });
+
+    it("omits context when not provided", async () => {
+      const spy = mockFetch(200, {
+        session_id: "s", session_url: "u", capture: "extension", expires_at: "e",
+      });
+      vi.stubGlobal("fetch", spy);
+
+      await authloop.toHuman({ service: "Test" });
 
       const body = JSON.parse(spy.mock.calls[0][1].body);
       expect(body.context).toBeUndefined();
@@ -100,15 +106,30 @@ describe("AuthLoop", () => {
     it("throws AuthLoopError on API error", async () => {
       vi.stubGlobal("fetch", mockFetch(401, { error: "invalid_api_key" }));
 
-      await expect(authloop.toHuman({ service: "Test", cdpUrl: "ws://x" }))
+      await expect(authloop.toHuman({ service: "Test" }))
         .rejects.toThrow(AuthLoopError);
 
       try {
-        await authloop.toHuman({ service: "Test", cdpUrl: "ws://x" });
+        await authloop.toHuman({ service: "Test" });
       } catch (e) {
         expect(e).toBeInstanceOf(AuthLoopError);
         expect((e as AuthLoopError).status).toBe(401);
         expect((e as AuthLoopError).code).toBe("invalid_api_key");
+      }
+    });
+
+    it("includes detail message from API on extension_not_connected", async () => {
+      vi.stubGlobal("fetch", mockFetch(412, {
+        error: "extension_not_connected",
+        message: "Browser extension is not connected.",
+      }));
+
+      try {
+        await authloop.toHuman({ service: "Test" });
+      } catch (e) {
+        expect((e as AuthLoopError).status).toBe(412);
+        expect((e as AuthLoopError).code).toBe("extension_not_connected");
+        expect((e as AuthLoopError).detail).toBe("Browser extension is not connected.");
       }
     });
 
@@ -119,11 +140,11 @@ describe("AuthLoop", () => {
         json: () => Promise.reject(new Error("not json")),
       }));
 
-      await expect(authloop.toHuman({ service: "Test", cdpUrl: "ws://x" }))
+      await expect(authloop.toHuman({ service: "Test" }))
         .rejects.toThrow(AuthLoopError);
 
       try {
-        await authloop.toHuman({ service: "Test", cdpUrl: "ws://x" });
+        await authloop.toHuman({ service: "Test" });
       } catch (e) {
         expect((e as AuthLoopError).code).toBe("request_failed");
       }
@@ -265,5 +286,11 @@ describe("AuthLoopError", () => {
     expect(err.message).toContain("quota_exceeded");
     expect(err.message).toContain("402");
     expect(err).toBeInstanceOf(Error);
+  });
+
+  it("includes detail message when provided", () => {
+    const err = new AuthLoopError(412, "extension_not_connected", "Install the extension.");
+    expect(err.detail).toBe("Install the extension.");
+    expect(err.message).toBe("Install the extension.");
   });
 });

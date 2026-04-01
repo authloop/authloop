@@ -11,7 +11,6 @@ export interface AuthLoopConfig {
 
 export interface ToHumanOptions {
   service: string;
-  cdpUrl: string;
   ttl?: number;
   context?: {
     url?: string;
@@ -23,8 +22,7 @@ export interface ToHumanOptions {
 export interface ToHumanResult {
   sessionId: string;
   sessionUrl: string;
-  streamToken: string;
-  streamUrl: string;
+  capture: "extension";
   expiresAt: string;
 }
 
@@ -52,7 +50,7 @@ export class AuthLoop {
   }
 
   async toHuman(options: ToHumanOptions): Promise<ToHumanResult> {
-    debug("toHuman: service=%s cdpUrl=%s", options.service, options.cdpUrl);
+    debug("toHuman: service=%s", options.service);
     debugHttp("POST %s/session", this.baseUrl);
 
     const t0 = Date.now();
@@ -64,7 +62,6 @@ export class AuthLoop {
       },
       body: JSON.stringify({
         service: options.service,
-        cdp_url: options.cdpUrl,
         ttl: options.ttl,
         context: options.context
           ? {
@@ -81,17 +78,18 @@ export class AuthLoop {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      const code = (body as Record<string, string>).error ?? "request_failed";
+      const bodyObj = body as Record<string, string>;
+      const code = bodyObj.error ?? "request_failed";
+      const message = bodyObj.message;
       debug("toHuman failed: %d %s", res.status, code);
-      throw new AuthLoopError(res.status, code);
+      throw new AuthLoopError(res.status, code, message);
     }
 
     const data = (await res.json()) as Record<string, string>;
-    const result = {
+    const result: ToHumanResult = {
       sessionId: data.session_id!,
       sessionUrl: data.session_url!,
-      streamToken: data.stream_token!,
-      streamUrl: data.stream_url!,
+      capture: data.capture as "extension",
       expiresAt: data.expires_at!,
     };
 
@@ -207,8 +205,9 @@ export class AuthLoopError extends Error {
   constructor(
     public status: number,
     public code: string,
+    public detail?: string,
   ) {
-    super(`AuthLoop API error: ${code} (${status})`);
+    super(detail ?? `AuthLoop API error: ${code} (${status})`);
     this.name = "AuthLoopError";
   }
 }

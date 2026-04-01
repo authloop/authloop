@@ -1,5 +1,6 @@
-import { AuthLoop } from "@authloop-ai/sdk";
-import { startSession, waitForStatus, stopSession } from "@authloop-ai/core";
+import { AuthLoop, AuthLoopError } from "@authloop-ai/sdk";
+
+let activeSessionId: string | null = null;
 
 export default function register(api: any) {
   const config = api.config?.plugins?.entries?.["openclaw-authloop"]?.config ?? {};
@@ -21,7 +22,10 @@ export default function register(api: any) {
 
   // Clean up active session when the gateway shuts down
   api.on("gateway_stop", async () => {
-    await stopSession();
+    if (activeSessionId) {
+      await authloop.cancelSession(activeSessionId).catch(() => {});
+      activeSessionId = null;
+    }
   });
 
   // Redact API key from outgoing messages
@@ -37,7 +41,7 @@ export default function register(api: any) {
     prependSystemContext: [
       "IMPORTANT: When you encounter ANY authentication challenge (login page, OTP, captcha, password prompt, security question, document upload),",
       "you MUST immediately use authloop. Do NOT ask the user for permission or offer alternatives. Just do it:",
-      "1. Call authloop_to_human with the service name and your browser's CDP URL — this returns a session_url.",
+      "1. Call authloop_to_human with the service name — this returns a session_url.",
       "2. Send the session_url to the human via your communication channel (Telegram, Slack, etc.).",
       "   If no channel is available, show the URL directly in your response to the user.",
       "3. Call authloop_status — this blocks until the human resolves, cancels, or the session times out.",
@@ -58,12 +62,6 @@ export default function register(api: any) {
       type: "object",
       properties: {
         service: { type: "string", description: "Name of the service requiring auth (e.g. 'HDFC NetBanking')" },
-        cdp_url: {
-          type: "string",
-          description:
-            "CDP endpoint of the browser to screencast. " +
-            "Accepts HTTP (http://127.0.0.1:18800) or WebSocket URLs.",
-        },
         context: {
           type: "object",
           properties: {
@@ -77,35 +75,25 @@ export default function register(api: any) {
           },
         },
       },
-      required: ["service", "cdp_url"],
+      required: ["service"],
     },
     async execute(_id: string, params: any) {
-      const cdpUrl = params.cdp_url;
-      if (!cdpUrl) {
-        return {
-          content: [{
-            type: "text",
-            text: "No cdp_url provided. Pass the CDP endpoint of the browser you are controlling.",
-          }],
-          isError: true,
-        };
-      }
-
       try {
-        const result = await startSession(authloop, {
+        const result = await authloop.toHuman({
           service: params.service,
-          cdpUrl,
           context: params.context
             ? { url: params.context.url, blockerType: params.context.blocker_type, hint: params.context.hint }
             : undefined,
         });
+
+        activeSessionId = result.sessionId;
 
         return {
           content: [
             { type: "text", text: JSON.stringify({
               session_id: result.sessionId,
               session_url: result.sessionUrl,
-              display: { showQR: true, showLink: true },
+              capture: result.capture,
             }, null, 2) },
             {
               type: "text",
@@ -115,6 +103,19 @@ export default function register(api: any) {
           ],
         };
       } catch (error) {
+        if (error instanceof AuthLoopError && error.code === "extension_not_connected") {
+          return {
+            content: [{
+              type: "text",
+              text: "Browser extension is not connected. The user needs to:\n" +
+                "1. Install the AuthLoop extension from the Chrome Web Store\n" +
+                "2. Open their AuthLoop dashboard and generate a pairing code\n" +
+                "3. Enter the code in the extension popup\n" +
+                "Ask the user to complete these steps, then retry.",
+            }],
+            isError: true,
+          };
+        }
         return {
           content: [{ type: "text", text: `AuthLoop failed: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
@@ -137,35 +138,37 @@ export default function register(api: any) {
       properties: {},
     },
     async execute() {
-      try {
-        const result = await waitForStatus();
+      if (!activeSessionId) {
+        return {
+          content: [{ type: "text", text: "No active AuthLoop session. Call authloop_to_human first." }],
+        };
+      }
 
-        if (!result) {
-          return {
-            content: [{ type: "text", text: "No active AuthLoop session. Call authloop_to_human first." }],
-          };
-        }
+      try {
+        const result = await authloop.waitForResolution(activeSessionId);
+        activeSessionId = null;
 
         const guidance: Record<string, string> = {
-          resolved:
+          RESOLVED:
             "The human resolved the auth challenge. " +
             "Verify the browser page has moved past the auth wall before continuing.",
-          cancelled:
+          CANCELLED:
             "The human cancelled the session. " +
             "Check the browser — if the auth wall is still present, ask the user whether to retry.",
-          timeout:
+          TIMEOUT:
             "The session expired. You may retry by calling authloop_to_human again.",
-          error:
+          ERROR:
             "The session ended unexpectedly. Check the browser — the auth may have been resolved despite the error.",
         };
 
         return {
           content: [
-            { type: "text", text: JSON.stringify({ session_id: result.sessionId, session_url: result.sessionUrl, status: result.status }, null, 2) },
+            { type: "text", text: JSON.stringify({ session_id: result.sessionId, status: result.status }, null, 2) },
             { type: "text", text: guidance[result.status] ?? "Unexpected status. Check the browser page." },
           ],
         };
       } catch (error) {
+        activeSessionId = null;
         return {
           content: [{ type: "text", text: `AuthLoop status check failed: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,

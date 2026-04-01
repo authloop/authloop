@@ -9,6 +9,9 @@
     "check-types": {
       "dependsOn": ["^check-types"]
     },
+    "@authloop-ai/extension#check-types": {
+      "dependsOn": ["@authloop-ai/extension#build"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
