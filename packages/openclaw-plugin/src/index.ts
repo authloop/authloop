@@ -62,6 +62,7 @@ export default function register(api: any) {
       type: "object",
       properties: {
         service: { type: "string", description: "Name of the service requiring auth (e.g. 'HDFC NetBanking')" },
+        cdp_url: { type: "string", description: "CDP endpoint of the browser (WebSocket URL)" },
         context: {
           type: "object",
           properties: {
@@ -75,12 +76,13 @@ export default function register(api: any) {
           },
         },
       },
-      required: ["service"],
+      required: ["service", "cdp_url"],
     },
     async execute(_id: string, params: any) {
       try {
         const result = await authloop.toHuman({
           service: params.service,
+          cdpUrl: params.cdp_url,
           context: params.context
             ? { url: params.context.url, blockerType: params.context.blocker_type, hint: params.context.hint }
             : undefined,
@@ -93,7 +95,6 @@ export default function register(api: any) {
             { type: "text", text: JSON.stringify({
               session_id: result.sessionId,
               session_url: result.sessionUrl,
-              capture: result.capture,
             }, null, 2) },
             {
               type: "text",

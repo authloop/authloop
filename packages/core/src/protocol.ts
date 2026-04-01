@@ -1,63 +1,11 @@
 /**
  * Shared protocol types for communication between:
- * - Backend ExtensionRelay DO ↔ Chrome extension
- * - Extension ↔ Web viewer (via relay or LiveKit data channel)
+ * - Agent (MCP/plugin) ↔ WebSocket relay ↔ Web viewer
  *
- * These types are the API contract — both repos import from here.
+ * These types are the API contract.
  */
 
-// --- Backend → Extension (via ExtensionRelay DO WebSocket) ---
-
-export interface StartSessionCommand {
-  type: "start_session";
-  session_id: string;
-  service: string;
-  context?: {
-    url?: string;
-    blocker_type?: string;
-    hint?: string;
-  };
-  ttl: number;
-  expires_at: string;
-  /** LiveKit Cloud URL (e.g. wss://your-project.livekit.cloud) */
-  livekit_url?: string;
-  /** LiveKit publisher token — extension uses this to publish video */
-  livekit_token?: string;
-  /** LiveKit room name */
-  livekit_room?: string;
-}
-
-export interface StopSessionCommand {
-  type: "stop_session";
-  session_id: string;
-}
-
-export type BackendToExtensionMessage = StartSessionCommand | StopSessionCommand;
-
-// --- Extension → Backend (via ExtensionRelay DO WebSocket) ---
-
-export interface SessionAckMessage {
-  type: "session_ack";
-  session_id: string;
-}
-
-export interface AuthCompleteMessage {
-  type: "auth_complete";
-  session_id: string;
-}
-
-export interface SessionErrorMessage {
-  type: "session_error";
-  session_id: string;
-  error: string;
-}
-
-export type ExtensionToBackendMessage =
-  | SessionAckMessage
-  | AuthCompleteMessage
-  | SessionErrorMessage;
-
-// --- Input events (viewer → extension, always E2EE encrypted) ---
+// --- Input events (viewer → agent, always E2EE encrypted) ---
 
 export interface ClickEvent {
   type: "click";
@@ -148,7 +96,7 @@ export interface EncryptedMessage {
   };
 }
 
-// --- Form Relay types (Phase 2) ---
+// --- Form Relay types (Phase 3) ---
 
 export interface FormField {
   id: string;
@@ -157,7 +105,6 @@ export interface FormField {
   label?: string;
   placeholder?: string;
   autocomplete?: string;
-  /** CSS pixel coordinates on the page (for input dispatch) */
   x: number;
   y: number;
   width: number;
@@ -168,7 +115,6 @@ export interface FormRelayData {
   type: "form_relay";
   session_id: string;
   fields: FormField[];
-  /** Optional contextual screenshot (base64 PNG) */
   screenshot?: string;
   submit_button?: {
     x: number;
@@ -177,16 +123,6 @@ export interface FormRelayData {
     height: number;
     text?: string;
   };
-}
-
-// --- Viewport types (Phase 3) ---
-
-export interface StreamMeta {
-  type: "stream_meta";
-  session_id: string;
-  cssWidth: number;
-  cssHeight: number;
-  pixelRatio: number;
 }
 
 // --- Detection result types ---

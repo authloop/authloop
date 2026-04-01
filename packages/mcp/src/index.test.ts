@@ -8,7 +8,7 @@ describe("MCP SDK integration", () => {
     vi.restoreAllMocks();
   });
 
-  it("toHuman without cdpUrl succeeds (v2 contract)", async () => {
+  it("toHuman with cdpUrl succeeds", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -18,20 +18,20 @@ describe("MCP SDK integration", () => {
           Promise.resolve({
             session_id: "sess_123",
             session_url: "https://authloop.ai/session/sess_123",
-            capture: "extension",
+            stream_token: "tok_abc",
+            stream_url: "wss://api.authloop.ai/stream/sess_123",
             expires_at: "2026-03-31T12:00:00Z",
           }),
       }),
     );
 
     const sdk = new AuthLoop({ apiKey: "al_test_key" });
-    const result = await sdk.toHuman({ service: "Test Service" });
+    const result = await sdk.toHuman({ service: "Test Service", cdpUrl: "ws://localhost:9222" });
 
-    expect(result.capture).toBe("extension");
     expect(result.sessionId).toBe("sess_123");
-    // Verify no cdp_url in the request body
+    expect(result.streamToken).toBe("tok_abc");
     const body = JSON.parse((vi.mocked(fetch).mock.calls[0][1] as any).body);
-    expect(body.cdp_url).toBeUndefined();
+    expect(body.cdp_url).toBe("ws://localhost:9222");
   });
 
   it("handles extension_not_connected error (412)", async () => {
@@ -50,7 +50,7 @@ describe("MCP SDK integration", () => {
 
     const sdk = new AuthLoop({ apiKey: "al_test_key" });
     try {
-      await sdk.toHuman({ service: "Test" });
+      await sdk.toHuman({ service: "Test", cdpUrl: "ws://localhost:9222" });
       expect.unreachable();
     } catch (e) {
       expect(e).toBeInstanceOf(AuthLoopError);
@@ -135,7 +135,8 @@ describe("MCP SDK integration", () => {
           Promise.resolve({
             session_id: "sess_ctx",
             session_url: "https://authloop.ai/session/sess_ctx",
-            capture: "extension",
+            stream_token: "tok_abc",
+            stream_url: "wss://api.authloop.ai/stream/sess_123",
             expires_at: "2026-03-31T12:00:00Z",
           }),
       }),
@@ -168,14 +169,15 @@ describe("MCP SDK integration", () => {
           Promise.resolve({
             session_id: "sess_auth",
             session_url: "https://authloop.ai/session/sess_auth",
-            capture: "extension",
+            stream_token: "tok_abc",
+            stream_url: "wss://api.authloop.ai/stream/sess_123",
             expires_at: "2026-03-31T12:00:00Z",
           }),
       }),
     );
 
     const sdk = new AuthLoop({ apiKey: "al_live_secret123" });
-    await sdk.toHuman({ service: "Test" });
+    await sdk.toHuman({ service: "Test", cdpUrl: "ws://localhost:9222" });
 
     const headers = (vi.mocked(fetch).mock.calls[0][1] as any).headers;
     expect(headers.Authorization).toBe("Bearer al_live_secret123");
@@ -197,7 +199,7 @@ describe("MCP SDK integration", () => {
 
     const sdk = new AuthLoop({ apiKey: "al_bad_key" });
     try {
-      await sdk.toHuman({ service: "Test" });
+      await sdk.toHuman({ service: "Test", cdpUrl: "ws://localhost:9222" });
       expect.unreachable();
     } catch (e) {
       expect(e).toBeInstanceOf(AuthLoopError);

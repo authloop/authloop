@@ -11,6 +11,7 @@ export interface AuthLoopConfig {
 
 export interface ToHumanOptions {
   service: string;
+  cdpUrl: string;
   ttl?: number;
   context?: {
     url?: string;
@@ -22,7 +23,8 @@ export interface ToHumanOptions {
 export interface ToHumanResult {
   sessionId: string;
   sessionUrl: string;
-  capture: "extension";
+  streamToken: string;
+  streamUrl: string;
   expiresAt: string;
 }
 
@@ -50,7 +52,7 @@ export class AuthLoop {
   }
 
   async toHuman(options: ToHumanOptions): Promise<ToHumanResult> {
-    debug("toHuman: service=%s", options.service);
+    debug("toHuman: service=%s cdpUrl=%s", options.service, options.cdpUrl);
     debugHttp("POST %s/session", this.baseUrl);
 
     const t0 = Date.now();
@@ -62,6 +64,7 @@ export class AuthLoop {
       },
       body: JSON.stringify({
         service: options.service,
+        cdp_url: options.cdpUrl,
         ttl: options.ttl,
         context: options.context
           ? {
@@ -89,7 +92,8 @@ export class AuthLoop {
     const result: ToHumanResult = {
       sessionId: data.session_id!,
       sessionUrl: data.session_url!,
-      capture: data.capture as "extension",
+      streamToken: data.stream_token!,
+      streamUrl: data.stream_url!,
       expiresAt: data.expires_at!,
     };
 

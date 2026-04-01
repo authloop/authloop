@@ -31,6 +31,11 @@ server.registerTool(
     },
     inputSchema: {
       service: z.string().describe("Name of the service requiring auth (e.g. 'HDFC NetBanking')"),
+      cdp_url: z.string().optional().describe(
+        "CDP endpoint of the browser to screencast. " +
+        "Accepts HTTP (http://127.0.0.1:9222) or WebSocket URLs. " +
+        "Falls back to AUTHLOOP_CDP_URL env var if not provided.",
+      ),
       context: z
         .object({
           url: z.string().optional().describe("Current page URL"),
@@ -45,9 +50,21 @@ server.registerTool(
     },
   },
   async (args) => {
+    const cdpUrl = args.cdp_url ?? process.env.AUTHLOOP_CDP_URL;
+    if (!cdpUrl) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: "No CDP URL provided. Pass cdp_url in the tool call or set AUTHLOOP_CDP_URL environment variable.",
+        }],
+        isError: true,
+      };
+    }
+
     try {
       const result = await sdk.toHuman({
         service: args.service,
+        cdpUrl,
         context: args.context
           ? { url: args.context.url, blockerType: args.context.blocker_type, hint: args.context.hint }
           : undefined,
@@ -60,7 +77,7 @@ server.registerTool(
           {
             type: "text" as const,
             text: JSON.stringify(
-              { session_id: result.sessionId, session_url: result.sessionUrl, capture: result.capture },
+              { session_id: result.sessionId, session_url: result.sessionUrl },
               null,
               2,
             ),

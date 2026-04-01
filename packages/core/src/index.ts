@@ -1,9 +1,24 @@
-// v2: Protocol types + E2EE crypto (Web Crypto API)
-// CDP client, BrowserStream, and agent-side session management are removed.
-// The Chrome extension now handles all browser capture and input dispatch.
+// CDP engine + E2EE (Web Crypto) + protocol types + input validation + detection
 
+// CDP engine (quality 85, 1920x1080, Web Crypto E2EE)
+export {
+  startSession,
+  waitForStatus,
+  stopSession,
+  _resetActiveSession,
+  _getActiveSession,
+  type ToHumanInput,
+  type StartSessionOutput,
+  type SessionStatusOutput,
+  type SessionStatus,
+} from "./session.js";
+export { BrowserStream, type StreamResult } from "./stream.js";
+export { CdpClient } from "./cdp.js";
+
+// E2EE (Web Crypto API — works in Node 18+, Chrome, mobile)
 export { E2EESession } from "./crypto.js";
 
+// Input validation
 export {
   validateClick,
   validateKeyDown,
@@ -12,14 +27,8 @@ export {
   type ValidationResult,
 } from "./input.js";
 
+// Protocol types
 export {
-  type BackendToExtensionMessage,
-  type StartSessionCommand,
-  type StopSessionCommand,
-  type ExtensionToBackendMessage,
-  type SessionAckMessage,
-  type AuthCompleteMessage,
-  type SessionErrorMessage,
   type InputEvent,
   type ClickEvent,
   type DoubleClickEvent,
@@ -34,7 +43,6 @@ export {
   type EncryptedMessage,
   type FormField,
   type FormRelayData,
-  type StreamMeta,
   type AuthChannel,
   type DetectedAuth,
   INPUT_LIMITS,
