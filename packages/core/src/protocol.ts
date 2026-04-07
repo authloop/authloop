@@ -96,46 +96,6 @@ export interface EncryptedMessage {
   };
 }
 
-// --- Form Relay types (Phase 3) ---
-
-export interface FormField {
-  id: string;
-  type: "text" | "password" | "tel" | "email" | "number" | "otp";
-  name?: string;
-  label?: string;
-  placeholder?: string;
-  autocomplete?: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface FormRelayData {
-  type: "form_relay";
-  session_id: string;
-  fields: FormField[];
-  screenshot?: string;
-  submit_button?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    text?: string;
-  };
-}
-
-// --- Detection result types ---
-
-export type AuthChannel = "form_relay" | "viewport" | "push_remind";
-
-export interface DetectedAuth {
-  channel: AuthChannel;
-  fields?: FormField[];
-  screenshot?: string;
-  hint?: string;
-}
-
 // --- Input validation constants ---
 
 export const INPUT_LIMITS = {

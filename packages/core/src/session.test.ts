@@ -28,7 +28,8 @@ class MockWebSocket {
     this.handlers.set(event, list);
   }
 
-  send() {}
+  sent: string[] = [];
+  send(data: string | ArrayBuffer) { if (typeof data === "string") this.sent.push(data); }
   close() {}
 
   // Test helpers
@@ -181,7 +182,7 @@ describe("waitForStatus()", () => {
     expect(result!.status).toBe("cancelled");
   });
 
-  it("resolves with error on WebSocket close", async () => {
+  it("resolves with error on WebSocket close and cancels session via API", async () => {
     const authloop = createMockAuthloop();
     await startSession(authloop as any, { service: "Test", cdpUrl: "ws://x" });
     await new Promise((r) => setTimeout(r, 10));
@@ -191,6 +192,11 @@ describe("waitForStatus()", () => {
 
     const result = await promise;
     expect(result!.status).toBe("error");
+
+    // Disconnect before stream started → must call cancelSession
+    // so the API doesn't leave the session ACTIVE forever
+    await new Promise((r) => setTimeout(r, 10));
+    expect(authloop.cancelSession).toHaveBeenCalledWith("sess_123");
   });
 
   it("calls resolveSession on successful resolution", async () => {

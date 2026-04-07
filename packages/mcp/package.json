@@ -45,6 +45,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@authloop-ai/core": "workspace:*",
     "@authloop-ai/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "zod": "^3.25.0"

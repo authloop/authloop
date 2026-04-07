@@ -11,6 +11,8 @@
 import createDebug from "debug";
 import { CdpClient } from "./cdp.js";
 import { E2EESession } from "./crypto.js";
+import { validateClick, validatePaste } from "./input.js";
+import { INPUT_LIMITS } from "./protocol.js";
 
 const debug = createDebug("authloop:stream");
 const perf = createDebug("authloop:perf");
@@ -28,6 +30,30 @@ const KEY_CODES: Record<string, number> = {
 
 export type StreamResult = "resolved" | "cancelled" | "error" | "timeout";
 
+/**
+ * Screencast quality preset.
+ *   low    — JPEG 60. Mobile / cellular fallback.
+ *   medium — JPEG 75. Lower bandwidth, some text artifacts.
+ *   high   — JPEG 90. Sharp text, default. Auth pages are text-heavy and
+ *            sessions are short — clarity matters more than bandwidth.
+ */
+export type ScreencastQuality = "low" | "medium" | "high";
+
+export interface ScreencastOptions {
+  /** Quality preset. Default: "high". */
+  quality?: ScreencastQuality;
+  /** Hard cap on capture width in CSS pixels. Default: 2560. */
+  maxWidth?: number;
+  /** Hard cap on capture height in CSS pixels. Default: 1440. */
+  maxHeight?: number;
+}
+
+const QUALITY_PRESETS: Record<ScreencastQuality, number> = {
+  low: 60,
+  medium: 75,
+  high: 90,
+};
+
 export class BrowserStream {
   private ws: WebSocket;
   private cdp: CdpClient | null = null;
@@ -43,6 +69,7 @@ export class BrowserStream {
     private opts: {
       ws: WebSocket;
       cdpUrl: string;
+      screencast?: ScreencastOptions;
     },
   ) {
     this.ws = opts.ws;
@@ -65,6 +92,13 @@ export class BrowserStream {
     perf("[perf:stream] CDP connect: %dms", Date.now() - t0);
     debug("CDP connected");
 
+    // Prevent Chrome from throttling the captured tab when it's in background.
+    // Without this, the page freezes after navigation until the captured tab
+    // is refocused — clicks fire but new frames don't arrive in real time.
+    await this.cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true }).catch((e) => {
+      debug("setFocusEmulationEnabled failed: %s", (e as Error).message);
+    });
+
     // 2. Initialize E2EE and send public key
     this.e2ee = await E2EESession.create();
     this.ws.send(JSON.stringify({ type: "pubkey", key: this.e2ee.publicKey }));
@@ -76,7 +110,9 @@ export class BrowserStream {
       if (typeof event.data === "string") {
         try {
           const msg = JSON.parse(event.data) as Record<string, unknown>;
-          this.handleMessage(msg);
+          this.handleMessage(msg).catch((err) => {
+            debug("handleMessage error: %s", (err as Error).message);
+          });
         } catch {
           debug("failed to parse message (dropped)");
         }
@@ -143,12 +179,36 @@ export class BrowserStream {
       }
     });
 
-    // 5. Start screencast (high quality for text-heavy auth pages)
+    // 5. Detect actual page viewport via CDP — capture at native resolution
+    // for sharp text. Cap at sane maximums to prevent abuse.
+    const screencast = this.opts.screencast ?? {};
+    const qualityPreset = screencast.quality ?? "high";
+    const maxW = screencast.maxWidth ?? 2560;
+    const maxH = screencast.maxHeight ?? 1440;
+    const jpegQuality = QUALITY_PRESETS[qualityPreset];
+
+    let captureWidth = maxW;
+    let captureHeight = maxH;
+    try {
+      const layout = await this.cdp.send("Page.getLayoutMetrics") as {
+        cssLayoutViewport?: { clientWidth: number; clientHeight: number };
+        layoutViewport?: { clientWidth: number; clientHeight: number };
+      };
+      const vp = layout.cssLayoutViewport ?? layout.layoutViewport;
+      if (vp) {
+        captureWidth = Math.min(vp.clientWidth, maxW);
+        captureHeight = Math.min(vp.clientHeight, maxH);
+        debug("detected viewport: %dx%d, capturing at %dx%d", vp.clientWidth, vp.clientHeight, captureWidth, captureHeight);
+      }
+    } catch (e) {
+      debug("getLayoutMetrics failed, using max caps: %s", (e as Error).message);
+    }
+
     await this.cdp.send("Page.startScreencast", {
       format: "jpeg",
-      quality: 85,
-      maxWidth: 1920,
-      maxHeight: 1080,
+      quality: jpegQuality,
+      maxWidth: captureWidth,
+      maxHeight: captureHeight,
       everyNthFrame: 1,
     });
     debug("screencast started");
@@ -280,6 +340,14 @@ export class BrowserStream {
     if (!this.cdp) return;
     const x = msg.x as number;
     const y = msg.y as number;
+
+    // Validate coordinates
+    const check = validateClick({ type: "click", x, y });
+    if (!check.valid) {
+      debug("click rejected: %s", check.reason);
+      return;
+    }
+
     const button = (msg.button as string) || "left";
     const clickCount = msg.type === "dblclick" ? 2 : 1;
 
@@ -336,10 +404,15 @@ export class BrowserStream {
   private dispatchPaste(msg: Record<string, unknown>): void {
     if (!this.cdp) return;
     const text = msg.text as string;
-    if (text) {
-      debug("paste: %d chars", text.length);
-      this.cdp.send("Input.insertText", { text }).catch(() => {});
+
+    const check = validatePaste({ type: "paste", text });
+    if (!check.valid) {
+      debug("paste rejected: %s", check.reason);
+      return;
     }
+
+    debug("paste: %d chars", text.length);
+    this.cdp.send("Input.insertText", { text }).catch(() => {});
   }
 
   private dispatchScroll(msg: Record<string, unknown>): void {

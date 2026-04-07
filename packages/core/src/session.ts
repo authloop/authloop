@@ -11,7 +11,7 @@
 
 import createDebug from "debug";
 import { AuthLoop } from "@authloop-ai/sdk";
-import { BrowserStream, type StreamResult } from "./stream.js";
+import { BrowserStream, type StreamResult, type ScreencastOptions } from "./stream.js";
 
 const debug = createDebug("authloop:session");
 const perf = createDebug("authloop:perf");
@@ -24,6 +24,8 @@ export interface ToHumanInput {
     blockerType?: "otp" | "password" | "captcha" | "security_question" | "document_upload" | "other";
     hint?: string;
   };
+  /** Screencast quality + resolution caps. Default: medium quality, native viewport (capped at 2560x1440). */
+  screencast?: ScreencastOptions;
 }
 
 export interface StartSessionOutput {
@@ -47,6 +49,7 @@ interface ActiveSession {
   stream: BrowserStream | null;
   ws: WebSocket;
   cdpUrl: string;
+  screencast?: ScreencastOptions;
   startTime: number;
   expiresAt: string;
   /** Resolves when status changes from "streaming" to a terminal state */
@@ -142,6 +145,7 @@ export async function startSession(
     stream: null,
     ws,
     cdpUrl: options.cdpUrl,
+    screencast: options.screencast,
     startTime,
     expiresAt: session.expiresAt,
     onTerminal,
@@ -174,6 +178,11 @@ export async function startSession(
   ws.addEventListener("close", () => {
     if (active && active.status === "streaming") {
       debug("relay WebSocket closed unexpectedly");
+      // If the stream never started (no viewer yet), the BrowserStream
+      // resolution path won't run — call cancelSession directly.
+      if (!active.stream) {
+        active.authloop.cancelSession(active.sessionId).catch(() => {});
+      }
       setTerminalStatus("error");
     }
   });
@@ -196,6 +205,7 @@ async function startStreaming(): Promise<void> {
   const stream = new BrowserStream({
     ws: active.ws,
     cdpUrl: active.cdpUrl,
+    screencast: active.screencast,
   });
   active.stream = stream;
 
@@ -211,8 +221,12 @@ async function startStreaming(): Promise<void> {
     if (result === "resolved") {
       debug("resolving session %s", active.sessionId);
       await active.authloop.resolveSession(active.sessionId).catch(() => {});
-    } else if (result === "cancelled") {
-      debug("cancelling session %s", active.sessionId);
+    } else if (result === "cancelled" || result === "error") {
+      // Cancel + error both mean "session is over without resolution".
+      // Cancel API marks the session CANCELLED in KV+Neon and notifies viewers.
+      // For "error" the cause was an unexpected disconnect — we still want
+      // the API to know the session is dead so it doesn't sit ACTIVE forever.
+      debug("cancelling session %s (reason=%s)", active.sessionId, result);
       await active.authloop.cancelSession(active.sessionId).catch(() => {});
     }
 

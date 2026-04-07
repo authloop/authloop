@@ -1,6 +1,5 @@
-import { AuthLoop, AuthLoopError } from "@authloop-ai/sdk";
-
-let activeSessionId: string | null = null;
+import { AuthLoop } from "@authloop-ai/sdk";
+import { startSession, waitForStatus, stopSession } from "@authloop-ai/core";
 
 export default function register(api: any) {
   const config = api.config?.plugins?.entries?.["openclaw-authloop"]?.config ?? {};
@@ -22,10 +21,7 @@ export default function register(api: any) {
 
   // Clean up active session when the gateway shuts down
   api.on("gateway_stop", async () => {
-    if (activeSessionId) {
-      await authloop.cancelSession(activeSessionId).catch(() => {});
-      activeSessionId = null;
-    }
+    await stopSession();
   });
 
   // Redact API key from outgoing messages
@@ -80,15 +76,13 @@ export default function register(api: any) {
     },
     async execute(_id: string, params: any) {
       try {
-        const result = await authloop.toHuman({
+        const result = await startSession(authloop, {
           service: params.service,
           cdpUrl: params.cdp_url,
           context: params.context
             ? { url: params.context.url, blockerType: params.context.blocker_type, hint: params.context.hint }
             : undefined,
         });
-
-        activeSessionId = result.sessionId;
 
         return {
           content: [
@@ -98,25 +92,13 @@ export default function register(api: any) {
             }, null, 2) },
             {
               type: "text",
-              text: "Session created. Send the session_url to the human via your communication channel. " +
+              text: "Session created and browser streaming started. " +
+                "Send the session_url to the human via your communication channel. " +
                 "Then call authloop_status to wait for the human to resolve the auth challenge.",
             },
           ],
         };
       } catch (error) {
-        if (error instanceof AuthLoopError && error.code === "extension_not_connected") {
-          return {
-            content: [{
-              type: "text",
-              text: "Browser extension is not connected. The user needs to:\n" +
-                "1. Install the AuthLoop extension from the Chrome Web Store\n" +
-                "2. Open their AuthLoop dashboard and generate a pairing code\n" +
-                "3. Enter the code in the extension popup\n" +
-                "Ask the user to complete these steps, then retry.",
-            }],
-            isError: true,
-          };
-        }
         return {
           content: [{ type: "text", text: `AuthLoop failed: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
@@ -139,26 +121,25 @@ export default function register(api: any) {
       properties: {},
     },
     async execute() {
-      if (!activeSessionId) {
-        return {
-          content: [{ type: "text", text: "No active AuthLoop session. Call authloop_to_human first." }],
-        };
-      }
-
       try {
-        const result = await authloop.waitForResolution(activeSessionId);
-        activeSessionId = null;
+        const result = await waitForStatus();
+
+        if (!result) {
+          return {
+            content: [{ type: "text", text: "No active AuthLoop session. Call authloop_to_human first." }],
+          };
+        }
 
         const guidance: Record<string, string> = {
-          RESOLVED:
+          resolved:
             "The human resolved the auth challenge. " +
             "Verify the browser page has moved past the auth wall before continuing.",
-          CANCELLED:
+          cancelled:
             "The human cancelled the session. " +
             "Check the browser — if the auth wall is still present, ask the user whether to retry.",
-          TIMEOUT:
+          timeout:
             "The session expired. You may retry by calling authloop_to_human again.",
-          ERROR:
+          error:
             "The session ended unexpectedly. Check the browser — the auth may have been resolved despite the error.",
         };
 
@@ -169,7 +150,6 @@ export default function register(api: any) {
           ],
         };
       } catch (error) {
-        activeSessionId = null;
         return {
           content: [{ type: "text", text: `AuthLoop status check failed: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
