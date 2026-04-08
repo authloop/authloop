@@ -1,6 +1,6 @@
 {
   "name": "@authloop-ai/sdk",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "TypeScript SDK for AuthLoop — human-in-the-loop authentication for AI agents",
   "type": "module",
   "license": "MIT",

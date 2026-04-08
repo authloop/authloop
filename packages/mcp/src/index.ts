@@ -19,7 +19,7 @@ if (!apiKey) {
 
 const sdk = new AuthLoop({ apiKey, baseUrl: process.env.AUTHLOOP_BASE_URL });
 const server = new McpServer(
-  { name: "@authloop-ai/mcp", version: "0.2.2" },
+  { name: "@authloop-ai/mcp", version: "0.3.0" },
   {
     instructions:
       "AuthLoop hands off authentication challenges to a human who solves them remotely. " +
