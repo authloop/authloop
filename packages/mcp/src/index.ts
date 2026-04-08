@@ -18,7 +18,19 @@ if (!apiKey) {
 }
 
 const sdk = new AuthLoop({ apiKey, baseUrl: process.env.AUTHLOOP_BASE_URL });
-const server = new McpServer({ name: "@authloop-ai/mcp", version: "0.2.2" });
+const server = new McpServer(
+  { name: "@authloop-ai/mcp", version: "0.2.2" },
+  {
+    instructions:
+      "AuthLoop hands off authentication challenges to a human who solves them remotely. " +
+      "When you encounter ANY auth wall during browser automation — login forms, OTP prompts, " +
+      "CAPTCHAs, password fields, security questions, document uploads — IMMEDIATELY call " +
+      "authloop_to_human, show the returned session_url to the user in your reply, then call " +
+      "authloop_status in the same turn to wait for completion. Never ask the user to type " +
+      "credentials, OTPs, or secrets into chat. If a chrome-devtools or browser-automation MCP " +
+      "is available, get the CDP endpoint from it and pass it as cdp_url.",
+  },
+);
 
 // ─── authloop_to_human ──────────────────────────────────────────────────────
 
@@ -61,8 +73,12 @@ server.registerTool(
       "USE WHEN: you encounter ANY auth wall during browser automation. Don't ask the user " +
       "to type credentials in chat — call this tool instead.\n\n" +
       "RETURNS: a session_url. SHOW THIS URL TO THE USER IMMEDIATELY (in your reply, in chat, " +
-      "wherever you communicate with them). Then call authloop_status to wait for them to finish.\n\n" +
-      "REQUIREMENT: a CDP-enabled browser. Pass cdp_url, or set AUTHLOOP_CDP_URL env var.",
+      "wherever you communicate with them).\n\n" +
+      "YOU MUST call authloop_status immediately after this tool, in the same turn. " +
+      "Skipping it will orphan the session and the user's work will be lost.\n\n" +
+      "REQUIREMENT: a CDP-enabled browser. Pass cdp_url (get it from chrome-devtools MCP, " +
+      "Playwright/Puppeteer wsEndpoint, or chrome --remote-debugging-port=9222), or set " +
+      "AUTHLOOP_CDP_URL env var.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -196,7 +212,15 @@ server.registerTool(
     await sendProgress("Waiting for the user to open the session URL and complete the auth…");
     const heartbeat = setInterval(() => {
       sendProgress("Still waiting for the user…").catch(() => {});
-    }, 30_000);
+    }, 15_000);
+
+    // Defensive timeout: server TTL is 10 minutes; give it 1 minute of slack.
+    // If waitForStatus() ever wedges (e.g. silent WebSocket failure), guarantee
+    // the tool returns instead of hanging forever.
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<null>((resolve) => {
+      timeoutId = setTimeout(() => resolve(null), 11 * 60 * 1000);
+    });
 
     // Honor client-side cancellation: if the abort signal fires while we wait,
     // stop the local session so the agent doesn't keep streaming forever.
@@ -206,7 +230,7 @@ server.registerTool(
     extra.signal.addEventListener("abort", onAbort);
 
     try {
-      const result = await waitForStatus();
+      const result = await Promise.race([waitForStatus(), timeoutPromise]);
 
       if (!result) {
         return {
@@ -238,6 +262,7 @@ server.registerTool(
       };
     } finally {
       clearInterval(heartbeat);
+      if (timeoutId) clearTimeout(timeoutId);
       extra.signal.removeEventListener("abort", onAbort);
     }
   },
